@@ -10,7 +10,7 @@ from pathlib import Path
 
 from resume_ab.compare import aggregate_result, compare_resumes
 from resume_ab.load import Document, LoadError, load_job_description, load_resumes
-from resume_ab.log import append_match, build_record
+from resume_ab.log import Cache, append_match, build_record
 from typesafe_sdk import TypeSafeError
 
 
@@ -32,19 +32,29 @@ def build_matchups(
     resumes: list[tuple[Path, Document]],
     jd_name: str | None = None,
     jd_text: str | None = None,
+    cache: Cache | None = None,
 ) -> Matchups:
-    """Compares every pair (both orders each) and logs each match to ``matches.jsonl``."""
+    """Compares every pair (both orders each) and logs each new match to ``matches.jsonl``.
+
+    Pairs already in ``cache`` are reused instead of calling the API; ``None`` disables reuse.
+    """
     if len(resumes) < 2:
         raise ValueError(f"need at least two resumes to build a matchup matrix, got {len(resumes)}")
 
     matrix: list[list[float | None]] = [[None] * len(resumes) for _ in resumes]
     pairs = list(combinations(range(len(resumes)), 2))
+    cached_count = 0
     for count, (i, j) in enumerate(pairs, start=1):
         (left_path, left), (right_path, right) = resumes[i], resumes[j]
-        print(f"[{count}/{len(pairs)}] {left_path.name} vs {right_path.name}", file=sys.stderr)
-        result = compare_resumes(left, right, jd_text)
-        append_match(
-            build_record(
+        label = f"[{count}/{len(pairs)}] {left_path.name} vs {right_path.name}"
+        result = cache.get(left.text, right.text, jd_text) if cache is not None else None
+        if result is not None:
+            cached_count += 1
+            print(f"{label} (cached in {cache.path}, skipped API call)", file=sys.stderr)
+        else:
+            print(label, file=sys.stderr)
+            result = compare_resumes(left, right, jd_text)
+            record = build_record(
                 left_name=str(left_path),
                 right_name=str(right_path),
                 left_text=left.text,
@@ -53,9 +63,19 @@ def build_matchups(
                 jd_text=jd_text,
                 result=result,
             )
-        )
+            if cache is not None:
+                cache.put(record)
+            else:
+                append_match(record)
         matrix[i][j] = aggregate_result(result)
         matrix[j][i] = 1 - matrix[i][j]
+
+    if cache is not None:
+        print(
+            f"Reused {cached_count} of {len(pairs)} matchups from {cache.path}; "
+            f"made {len(pairs) - cached_count} new comparisons.",
+            file=sys.stderr,
+        )
 
     return Matchups(names=[path.name for path, _ in resumes], matrix=matrix)
 
@@ -84,11 +104,12 @@ def format_matchups(matchups: Matchups) -> str:
     )
 
 
-def run(folder: Path, jd_path: Path | None = None) -> int:
+def run(folder: Path, jd_path: Path | None = None, use_cache: bool = True) -> int:
     try:
         resumes = load_resumes(folder)
         jd_text = load_job_description(jd_path).text if jd_path else None
-        matchups = build_matchups(resumes, str(jd_path) if jd_path else None, jd_text)
+        cache = Cache() if use_cache else None
+        matchups = build_matchups(resumes, str(jd_path) if jd_path else None, jd_text, cache)
     except (FileNotFoundError, LoadError, TypeSafeError, ValueError) as error:
         print(error, file=sys.stderr)
         return 1
@@ -103,8 +124,13 @@ def main(argv: list[str] | None = None) -> int:
         "folder", help="Folder containing supported resume files (.txt, .pdf, .docx, .tex)"
     )
     parser.add_argument("--jd", metavar="FILE", help="Job description file")
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Call the API for every pair instead of reusing results from matches.jsonl",
+    )
     args = parser.parse_args(argv)
-    return run(Path(args.folder), Path(args.jd) if args.jd else None)
+    return run(Path(args.folder), Path(args.jd) if args.jd else None, not args.no_cache)
 
 
 if __name__ == "__main__":
