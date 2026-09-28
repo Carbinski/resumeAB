@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "resume-ab"
+version = "0.1.0"
+description = "Ranking resumes with AB testing via Jev"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "typesafe-sdk>=0.7",
+    "pypdf>=5",
+    "python-docx>=1.1",
+    "pylatexenc>=2.10",
+]
+
+[tool.setuptools]
+packages = ["resume_ab"]

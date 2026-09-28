@@ -86,6 +86,11 @@ def compare_resumes(left: Document, right: Document, role_description: str | Non
     return CompareResult(first=one_order(left, right), second=one_order(right, left))
 
 
+def aggregate_result(result: CompareResult) -> float:
+    """Probability ``first``'s left resume is stronger, averaged over both orders."""
+    return (result.first.noul + (1 - result.second.noul)) / 2
+
+
 def format_report(left_name: str, right_name: str, result: CompareResult) -> str:
     def one_order(left_file: str, right_file: str, order: OrderResult) -> str:
         probabilities = order.choice["probabilities"]
