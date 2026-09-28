@@ -11,7 +11,10 @@ secrets/
 # Local resumes and match history
 private/
 example_resumes/
+previous_versions/
 matches.jsonl
+improvement.md
+experiments.md
 
 # Dependencies
 node_modules/
