@@ -1,0 +1,35 @@
+Jordan Hale
+jordan.hale@gmail.com | (512) 555-0198 | Austin, TX
+github.com/jordanhale | linkedin.com/in/jordan-hale
+
+SOFTWARE ENGINEER
+
+EDUCATION
+University of Texas at Austin — Austin, TX
+B.S. Electrical and Computer Engineering, 2022
+GPA: 3.41 / 4.00
+
+EXPERIENCE
+Dell Technologies — Round Rock, TX
+Software Engineer, Infrastructure Software                     Jul 2022 – Present
+- Maintain a Python service that provisions bare-metal servers for an internal lab cloud used by firmware and driver teams.
+- Added health checks and structured logging that cut failed provision jobs from about 12% to 4% over two quarters.
+- Wrote integration tests against a staging rack and a small Flask admin page for operators to retry failed jobs.
+- Participate in a weekly on-call rotation for the provisioning API (low hundreds of requests per hour).
+
+Indeed — Austin, TX
+Software Engineering Intern, Job Search                         May 2021 – Aug 2021
+- Built a React filter panel for the job search results page and wired it to an existing Java search API.
+- Fixed three accessibility bugs (keyboard focus, label associations) found in QA before the intern demo.
+
+PROJECTS
+Homelab Inventory — personal
+- Small CLI in Python that tracks machines on a home network and writes a CSV. Uses SSH and a SQLite file. Used by me and two friends.
+
+Coursework chatbot — UT Austin senior design
+- Retrieval chatbot over public course syllabi. Flask, sentence-transformers, and a SQLite store. Demoed to the capstone class; not deployed.
+
+SKILLS
+Languages: Python, Java, JavaScript, SQL, Bash
+Systems: Linux, Docker, SQLite, Flask, Git, basic AWS (EC2, S3)
+Practices: integration tests, logging, code review

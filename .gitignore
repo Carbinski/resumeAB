@@ -1,0 +1,65 @@
+# Secrets and local config
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+credentials.json
+secrets/
+
+# Local resumes and match history
+private/
+matches.jsonl
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Frontend and API build output
+dist/
+build/
+out/
+.next/
+.nuxt/
+.output/
+.vercel/
+*.tsbuildinfo
+
+# Python backend
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Tests, coverage, and local runs
+coverage/
+.nyc_output/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.tox/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+tmp/
+temp/
+.cache/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
