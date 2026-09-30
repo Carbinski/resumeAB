@@ -161,7 +161,7 @@ def format_matchups(matchups: Matchups) -> Group:
         header_style="bold",
     )
     table.add_column("#", justify="right", no_wrap=True)
-    table.add_column("resume", overflow="fold")
+    table.add_column("resume", overflow="ellipsis")
     for rank in range(1, len(order) + 1):
         table.add_column(f"#{rank}", justify="right", min_width=3)
     table.add_column("mean", justify="right", style="bold", min_width=3)
@@ -176,7 +176,7 @@ def format_matchups(matchups: Matchups) -> Group:
         ]
         table.add_row(
             f"#{rank}",
-            Text(names[i]),
+            Text(names[i], no_wrap=True, overflow="ellipsis"),
             *cells,
             probability_cell(matchups.mean_win_probability(i)),
             f"{elo[i]:.0f}",
