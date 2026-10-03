@@ -5,10 +5,12 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { uploadResume } from "@/lib/api";
+import { ACCEPTED_FORMATS } from "@/lib/brand";
 import type { RoleId } from "@/lib/roles";
 import type { ResumeVersion } from "@/lib/types";
 
@@ -29,6 +31,8 @@ interface LadderState {
   /** Appends an already-rated version, e.g. an A/B draft the user keeps. */
   addVersion: (version: ResumeVersion) => void;
   resetUpload: () => void;
+  /** Opens the shared file dialog; the chosen file is rated and added to the history. */
+  pickFile: () => void;
 }
 
 const Ctx = createContext<LadderState | null>(null);
@@ -88,10 +92,38 @@ export function LadderProvider({
 
   const resetUpload = useCallback(() => setUpload({ phase: "idle" }), []);
 
+  const inputRef = useRef<HTMLInputElement>(null);
+  const pickFile = useCallback(() => inputRef.current?.click(), []);
+
   const value = useMemo(
-    () => ({ history, current, role, setRole, upload, rateFile, addVersion, resetUpload }),
-    [history, current, role, upload, rateFile, addVersion, resetUpload],
+    () => ({
+      history,
+      current,
+      role,
+      setRole,
+      upload,
+      rateFile,
+      addVersion,
+      resetUpload,
+      pickFile,
+    }),
+    [history, current, role, upload, rateFile, addVersion, resetUpload, pickFile],
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      {children}
+      <input
+        ref={inputRef}
+        type="file"
+        hidden
+        accept={ACCEPTED_FORMATS.join(",")}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) void rateFile(file);
+        }}
+      />
+    </Ctx.Provider>
+  );
 }
