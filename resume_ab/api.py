@@ -5,6 +5,7 @@ Run with ``python -m resume_ab.api``. The site proxies ``/api/ladder`` here.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import threading
@@ -22,6 +23,9 @@ from resume_ab.place import place_resume, run_compare
 from resume_ab.present import comparison_payload, user_payload, version_payload
 from resume_ab.redact import redact
 from resume_ab.store import Store, User
+from resume_ab.textlog import configure_text_log, log_resume_text
+
+status_log = logging.getLogger("resume_ab")
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _MAX_BYTES = 5_000_000
@@ -222,6 +226,8 @@ def create_app(
         finally:
             temporary.unlink(missing_ok=True)
         redacted = redact(document.text, name=user.name_on_resume)
+        log_resume_text(stage="extracted", filename=filename, text=document.text)
+        log_resume_text(stage="redacted", filename=filename, text=redacted)
         if len(redacted) < 40:
             raise HTTPException(
                 status_code=400,
@@ -378,6 +384,11 @@ def _load_dotenv(path: Path = Path(".env")) -> None:
 def build_default_app() -> FastAPI:
     _load_dotenv()
     data = Path(os.environ.get("LADDER_DATA", "data"))
+    log_path = configure_text_log(data)
+    if os.environ.get("TYPESAFE_API_KEY", "").strip():
+        status_log.warning("TYPESAFE_API_KEY is set. Résumé text logs: %s", log_path)
+    else:
+        status_log.warning("TYPESAFE_API_KEY is not set. Matchups will fail. Résumé text logs: %s", log_path)
     store = Store(data / "ladder.db", data / "blobs")
     store.seed_anchors()
     return create_app(store, JevJudge(), sync=False, resume_jobs=True)
@@ -390,7 +401,7 @@ def main() -> None:
     import uvicorn
 
     uvicorn.run(
-        "resume_ab.api:app",
+        app,
         host=os.environ.get("LADDER_HOST", "127.0.0.1"),
         port=int(os.environ.get("LADDER_PORT", "8000")),
         reload=False,

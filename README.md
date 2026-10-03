@@ -24,6 +24,8 @@ cd web && npm install && npm run dev
 
 Set `TYPESAFE_API_KEY` in `.env` before uploading. Each published résumé is compared with at most eight opponents in its intern or new-grad pool, in both reading orders. Synthetic calibration résumés are seeded automatically and never appear on the public board.
 
+Every upload appends the extracted text and the redacted text to `data/logs/resume-text.log`, and prints the same blocks on the API process. That file is local only. The browser never receives it.
+
 ## Caching
 
 Every comparison is appended to `matches.jsonl`, which doubles as a cache: a pair with the same resume and job description text (in either order) is reused instead of calling the API again. Pass `--no-cache` to force fresh calls.
