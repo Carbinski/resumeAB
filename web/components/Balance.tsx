@@ -6,13 +6,20 @@ import { cn } from "@/lib/cn";
 import type { ResumeVersion } from "@/lib/types";
 import type { RoleId } from "@/lib/roles";
 
-type Phase = "setup" | "running" | "result";
+export type BalancePhase = "setup" | "running" | "result";
+
+const MAX_TILT = 12;
+const SWAY = [0, -5, 4, -3, 2, -1, 0];
+
+const SETTLE: Transition = { type: "spring", stiffness: 58, damping: 9, mass: 1 };
+const WEIGH: Transition = { duration: 2.4, repeat: Infinity, ease: "easeInOut" };
 
 function Pan({
   tag,
   version,
   role,
   winner,
+  pending,
   counter,
   transition,
   empty,
@@ -21,22 +28,28 @@ function Pan({
   version: ResumeVersion | null;
   role: RoleId;
   winner: boolean;
+  pending?: boolean;
   counter: number | number[];
   transition: Transition;
   empty: string;
 }) {
   return (
     <motion.div
-      className="absolute left-0 top-0 w-[132px] sm:w-[188px]"
+      className="absolute left-0 top-0 w-[112px] sm:w-[176px]"
       style={{ x: "-50%", originX: 0.5, originY: 0 }}
       animate={{ rotate: counter }}
       transition={transition}
     >
-      <svg viewBox="0 0 100 64" className="mx-auto block h-14 w-full" preserveAspectRatio="none" aria-hidden>
+      <svg
+        viewBox="0 0 100 48"
+        className="mx-auto block h-10 w-[78%] sm:h-12"
+        preserveAspectRatio="none"
+        aria-hidden
+      >
         <path
-          d="M50 0 L10 64 M50 0 L90 64"
+          d="M50 0 L6 48 M50 0 L94 48"
           stroke="#403926"
-          strokeOpacity="0.55"
+          strokeOpacity="0.5"
           strokeWidth="1"
           fill="none"
           vectorEffect="non-scaling-stroke"
@@ -44,65 +57,69 @@ function Pan({
       </svg>
       <div
         className={cn(
-          "glass rounded-[22px] px-3 py-3 text-center transition-shadow duration-700 sm:px-4",
-          winner && "shadow-[0_0_0_2px_#BC7767,0_24px_48px_-20px_rgba(188,119,103,0.6)]",
-          !version && "border-dashed",
+          "glass flex h-[92px] flex-col items-center justify-center rounded-[20px] px-2 text-center transition-shadow duration-700 sm:h-[104px] sm:rounded-[24px]",
+          winner && "shadow-[0_0_0_2px_#BC7767,0_24px_44px_-18px_rgba(188,119,103,0.65)]",
+          !version && !pending && "border-dashed",
         )}
       >
-        <p className="font-mono text-[0.66rem] uppercase tracking-[0.18em] text-olive">
+        <p className="font-mono text-[0.64rem] uppercase tracking-[0.16em] text-olive">
           {tag}
           {version ? ` · ${version.label}` : ""}
         </p>
-        {version ? (
+        {pending ? (
+          <span className="mt-2 inline-flex items-center gap-2 text-[0.8rem] text-olive">
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-bark/20 border-t-clay" />
+            Rating…
+          </span>
+        ) : version ? (
           <>
-            <p className="font-display mt-1 text-[2.3rem] leading-none text-ink sm:text-[2.9rem]">
+            <p className="font-display text-[2.1rem] leading-none text-ink sm:text-[2.7rem]">
               {version.ratings[role]}
             </p>
-            <p className="mt-1.5 truncate text-[0.7rem] text-olive">{version.fileName}</p>
+            <p className="mt-1 w-full truncate text-[0.68rem] text-olive">{version.fileName}</p>
           </>
         ) : (
-          <p className="mx-auto mt-2 max-w-[11ch] py-3 text-[0.82rem] leading-snug text-taupe">
-            {empty}
-          </p>
+          <p className="mt-1 max-w-[12ch] text-[0.76rem] leading-snug text-taupe">{empty}</p>
         )}
       </div>
     </motion.div>
   );
 }
 
-/** The A/B lab's centrepiece: a scale that tips toward the stronger résumé. */
+/** A scale that tips toward the stronger résumé. Fixed height in every state. */
 export function Balance({
   a,
   b,
   role,
   phase,
   pB,
+  pendingB,
 }: {
   a: ResumeVersion | null;
   b: ResumeVersion | null;
   role: RoleId;
-  phase: Phase;
+  phase: BalancePhase;
   pB: number | null;
+  pendingB: boolean;
 }) {
-  const angle = phase === "result" && pB !== null ? clamp((pB - 0.5) * 55, -16, 16) : 0;
+  const running = phase === "running";
+  const angle =
+    phase === "result" && pB !== null ? clamp((pB - 0.5) * 40, -MAX_TILT, MAX_TILT) : 0;
   const winnerB = phase === "result" && pB !== null && pB >= 0.55;
   const winnerA = phase === "result" && pB !== null && pB <= 0.45;
 
-  const sway = [0, -7, 6, -4, 3, -1, 0];
-  const running = phase === "running";
-  const beam = running ? sway : angle;
-  const counter = running ? sway.map((d) => -d) : -angle;
-  const transition: Transition = running
-    ? { duration: 2.2, repeat: Infinity, ease: "easeInOut" }
-    : { type: "spring", stiffness: 38, damping: 5.5, mass: 1.1 };
+  const beam = running ? SWAY : angle;
+  const counter = running ? SWAY.map((d) => -d) : -angle;
+  const transition = running ? WEIGH : SETTLE;
 
   return (
-    <div className="relative mx-auto h-[360px] w-full max-w-[760px] sm:h-[400px]" aria-hidden={false}>
-      <div className="absolute bottom-0 left-1/2 top-[96px] w-[3px] -translate-x-1/2 rounded-full bg-gradient-to-b from-ink to-bark/30" />
-      <div className="absolute bottom-0 left-1/2 h-3 w-40 -translate-x-1/2 rounded-full bg-bark/15 blur-[2px]" />
+    <div className="relative mx-auto h-[292px] w-full max-w-[720px] sm:h-[336px]">
+      <div className="absolute bottom-3 left-1/2 top-[66px] w-[3px] -translate-x-1/2 rounded-full bg-gradient-to-b from-ink to-bark/20 sm:top-[76px]" />
+      <div className="absolute bottom-0 left-1/2 h-3 w-36 -translate-x-1/2 rounded-full bg-bark/15 blur-[3px]" />
+      <div className="absolute bottom-1.5 left-1/2 h-2 w-24 -translate-x-1/2 rounded-full bg-bark/70" />
 
       <motion.div
-        className="absolute inset-x-[16%] top-[96px] h-[4px] rounded-full bg-ink sm:inset-x-[9%]"
+        className="absolute inset-x-[21%] top-[66px] h-[4px] rounded-full bg-ink sm:inset-x-[14%] sm:top-[76px]"
         animate={{ rotate: beam }}
         transition={transition}
       >
@@ -124,6 +141,7 @@ export function Balance({
             version={b}
             role={role}
             winner={winnerB}
+            pending={pendingB}
             counter={counter}
             transition={transition}
             empty="Add the edited version"

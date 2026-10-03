@@ -53,7 +53,7 @@ export function Verdict({ result }: { result: CompareResult }) {
   return (
     <div className="text-center">
       <motion.h3
-        className="font-display text-[clamp(3.4rem,11vw,8rem)] leading-[0.9] text-ink"
+        className="font-display text-[clamp(3rem,8vw,6rem)] leading-[0.92] text-ink"
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 1, ease: EASE }}
@@ -61,7 +61,7 @@ export function Verdict({ result }: { result: CompareResult }) {
         {headline}
       </motion.h3>
       <motion.div
-        className="mt-5 flex flex-wrap items-center justify-center gap-3"
+        className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1"
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.9, ease: EASE, delay: 0.2 }}
@@ -70,7 +70,7 @@ export function Verdict({ result }: { result: CompareResult }) {
         <span className="text-[1rem] text-olive">{detail}</span>
       </motion.div>
       <motion.p
-        className="mt-2 text-[0.92rem] text-taupe"
+        className="mt-1.5 text-[0.92rem] text-taupe"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.45 }}

@@ -73,9 +73,11 @@ function VersionChips({
 function DraftDrop({
   baseline,
   onDraft,
+  onBusy,
 }: {
   baseline: ResumeVersion;
   onDraft: (v: ResumeVersion) => void;
+  onBusy: (busy: boolean) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -83,19 +85,21 @@ function DraftDrop({
   const [error, setError] = useState<string | null>(null);
 
   const handle = async (file: File | undefined) => {
-    if (!file) return;
+    if (!file || busy) return;
     if (!isSupportedResume(file.name)) {
       setError(`Use ${ACCEPTED_FORMATS.join(", ")}.`);
       return;
     }
     setError(null);
     setBusy(true);
+    onBusy(true);
     try {
       onDraft(await uploadResume(file, { baseline, label: "Draft", note: "Draft from the A/B lab." }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed.");
     } finally {
       setBusy(false);
+      onBusy(false);
     }
   };
 
@@ -113,22 +117,23 @@ function DraftDrop({
         void handle(e.dataTransfer.files?.[0]);
       }}
       className={cn(
-        "relative flex min-h-[116px] items-center justify-between gap-4 rounded-[22px] border border-dashed px-5 py-4 transition-colors duration-300",
+        "flex h-[76px] items-center justify-between gap-4 rounded-[20px] border border-dashed px-5 transition-colors duration-300",
         over ? "border-clay bg-blush/40" : "border-bark/25 bg-cream/50",
       )}
     >
-      <div>
-        <p className="text-[0.95rem] text-ink">
+      <div className="min-w-0">
+        <p className="truncate text-[0.95rem] text-ink">
           {busy ? "Rating your edit…" : over ? "Release to add as B" : "Drop the edited version"}
         </p>
-        <p className="mt-0.5 font-mono text-[0.68rem] uppercase tracking-[0.14em] text-olive">
-          {ACCEPTED_FORMATS.map((f) => f.slice(1)).join(" · ")}
-        </p>
         {error ? (
-          <p role="alert" className="mt-1 text-[0.78rem] text-clay">
+          <p role="alert" className="truncate text-[0.74rem] text-clay">
             {error}
           </p>
-        ) : null}
+        ) : (
+          <p className="truncate font-mono text-[0.66rem] uppercase tracking-[0.14em] text-olive">
+            {ACCEPTED_FORMATS.map((f) => f.slice(1)).join(" · ")}
+          </p>
+        )}
       </div>
       <button
         type="button"
@@ -136,14 +141,7 @@ function DraftDrop({
         onClick={() => inputRef.current?.click()}
         className="shrink-0 rounded-full border border-bark/20 px-4 py-2 text-[0.82rem] text-ink transition-colors hover:bg-white/70 disabled:opacity-50"
       >
-        {busy ? (
-          <span className="inline-flex items-center gap-2">
-            <span className="h-3 w-3 animate-spin rounded-full border-2 border-bark/20 border-t-clay" />
-            Rating
-          </span>
-        ) : (
-          "Browse"
-        )}
+        Browse
       </button>
       <input
         ref={inputRef}
@@ -160,18 +158,38 @@ function DraftDrop({
   );
 }
 
+/** Keeps one slot of the status area mounted so the layout never changes height. */
+function Slot({ active, children }: { active: boolean; children: React.ReactNode }) {
+  return (
+    <motion.div
+      className="col-start-1 row-start-1 flex flex-col items-center justify-center"
+      initial={false}
+      animate={{ opacity: active ? 1 : 0, y: active ? 0 : 10 }}
+      transition={{ duration: 0.5, ease: EASE }}
+      style={{ pointerEvents: active ? "auto" : "none" }}
+      aria-hidden={!active}
+      inert={!active}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 export function Lab() {
   const { history, current, role, setRole, addVersion } = useLadder();
   const lenis = useLenis();
+  const stageRef = useRef<HTMLDivElement>(null);
 
   const [aId, setAId] = useState<string | null>(null);
   const [b, setB] = useState<ResumeVersion | null>(null);
+  const [drafting, setDrafting] = useState(false);
   const [phase, setPhase] = useState<Phase>("setup");
   const [result, setResult] = useState<CompareResult | null>(null);
   const [savedAs, setSavedAs] = useState<string | null>(null);
 
   const a = history.find((v) => v.id === aId) ?? current;
-  const ready = !!b && b.id !== a.id;
+  const ready = !!b && b.id !== a.id && !drafting;
+  const bIsDraft = !!b && !history.some((v) => v.id === b.id);
 
   const reset = () => {
     setPhase("setup");
@@ -179,17 +197,26 @@ export function Lab() {
     setSavedAs(null);
   };
 
+  /** Brings the scale and its verdict into view, only if they are not already. */
+  const frameStage = () => {
+    const node = stageRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    const top = 104;
+    if (rect.top >= top - 8 && rect.bottom <= window.innerHeight - 8) return;
+    const y = rect.top + window.scrollY - top;
+    if (lenis) lenis.scrollTo(y, { duration: 0.9 });
+    else window.scrollTo({ top: y, behavior: "smooth" });
+  };
+
   const run = async () => {
     if (!b || !ready) return;
     setPhase("running");
     setSavedAs(null);
+    frameStage();
     const outcome = await compareVersions(a, b, role);
     setResult(outcome);
     setPhase("result");
-    setTimeout(() => {
-      if (lenis) lenis.scrollTo("#lab-result", { offset: -96, duration: 1.4 });
-      else document.getElementById("lab-result")?.scrollIntoView({ behavior: "smooth" });
-    }, 350);
   };
 
   const keep = () => {
@@ -200,7 +227,18 @@ export function Lab() {
     setSavedAs(label);
   };
 
-  const bIsDraft = !!b && !history.some((v) => v.id === b.id);
+  const backToStage = () => {
+    frameStage();
+    reset();
+  };
+
+  const hint = drafting
+    ? "Rating your edit…"
+    : !b
+      ? "Choose a baseline, then add the version you changed."
+      : b.id === a.id
+        ? "Pick two different versions to compare."
+        : "Ready. Weigh A against B.";
 
   return (
     <section id="lab" className="mx-auto max-w-[1180px] px-5 pb-24 sm:px-8 md:pb-32">
@@ -219,15 +257,7 @@ export function Lab() {
       </SectionHeader>
 
       <Reveal className="relative mt-12 overflow-hidden rounded-[36px] border border-bark/10 bg-gradient-to-b from-white/60 to-peach/40 p-5 sm:p-8 md:mt-16 md:p-10">
-        <Balance
-          a={a}
-          b={b}
-          role={role}
-          phase={phase}
-          pB={result ? result.pB : null}
-        />
-
-        <div className="mt-10 grid gap-6 md:grid-cols-2 md:gap-8">
+        <div className="grid gap-6 md:grid-cols-2 md:gap-8">
           <div>
             <p className="mb-3 text-[0.72rem] font-medium uppercase tracking-[0.18em] text-olive">
               A · Baseline
@@ -249,6 +279,7 @@ export function Lab() {
             <div className="space-y-3">
               <DraftDrop
                 baseline={a}
+                onBusy={setDrafting}
                 onDraft={(v) => {
                   setB(v);
                   reset();
@@ -270,30 +301,24 @@ export function Lab() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col items-center gap-5">
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <span className="text-[0.85rem] text-olive">Judge for</span>
-            <Segmented
-              label="Role to judge for"
-              size="sm"
-              options={ROLES.map((r) => ({ id: r.id, label: r.label }))}
-              value={role}
-              onChange={(r) => {
-                setRole(r);
-                reset();
-              }}
-            />
-          </div>
+        <div ref={stageRef} className="mt-8 md:mt-10">
+          <Balance
+            a={a}
+            b={b}
+            role={role}
+            phase={phase}
+            pB={result ? result.pB : null}
+            pendingB={drafting}
+          />
 
-          <AnimatePresence mode="wait" initial={false}>
-            {phase === "running" ? (
-              <motion.div
-                key="running"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                className="w-full max-w-md text-center"
-              >
+          <div className="mt-2 grid min-h-[15rem] sm:min-h-[12.75rem]">
+            <Slot active={phase === "setup"}>
+              <p className="max-w-sm text-center text-[1.05rem] leading-snug text-olive">
+                {hint}
+              </p>
+            </Slot>
+            <Slot active={phase === "running"}>
+              <div className="w-full max-w-md">
                 <StepTicker steps={RUN_STEPS} intervalMs={750} className="justify-center text-center" />
                 <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-bark/10">
                   <motion.div
@@ -303,71 +328,85 @@ export function Lab() {
                     transition={{ duration: 3.2, ease: [0.4, 0, 0.2, 1] }}
                   />
                 </div>
-              </motion.div>
-            ) : (
-              <motion.div
-                key="cta"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                className="flex flex-col items-center gap-2"
-              >
-                <Magnetic>
-                  <Button className="h-12 px-8" disabled={!ready} onClick={run}>
-                    {phase === "result" ? "Run it again" : "Run comparison"}
-                  </Button>
-                </Magnetic>
-                {!ready ? (
-                  <p className="text-[0.8rem] text-taupe">
-                    Add a B version to put on the scale.
-                  </p>
-                ) : null}
-              </motion.div>
-            )}
-          </AnimatePresence>
+              </div>
+            </Slot>
+            <Slot active={phase === "result"}>
+              {result ? <Verdict key={`${result.a.id}-${result.b.id}-${result.role}`} result={result} /> : null}
+            </Slot>
+          </div>
+
+          <div className="mt-4 flex flex-col items-center gap-5">
+            <Magnetic>
+              <Button className="h-12 min-w-[12rem] px-8" disabled={!ready || phase === "running"} onClick={run}>
+                {phase === "running" ? "Weighing…" : phase === "result" ? "Run it again" : "Run comparison"}
+              </Button>
+            </Magnetic>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <span className="text-[0.85rem] text-olive">Judge for</span>
+              <Segmented
+                label="Role to judge for"
+                size="sm"
+                options={ROLES.map((r) => ({ id: r.id, label: r.label }))}
+                value={role}
+                onChange={(r) => {
+                  setRole(r);
+                  reset();
+                }}
+              />
+            </div>
+          </div>
         </div>
       </Reveal>
 
-      <div id="lab-result" className="scroll-mt-24">
-        <AnimatePresence>
-          {phase === "result" && result ? (
-            <motion.div
-              key="result"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.6, ease: EASE }}
-              className="pt-14 md:pt-20"
-            >
-              <Verdict result={result} />
+      {phase === "result" && result ? (
+        <div className="mt-5 flex justify-center">
+          <a
+            href="#lab-result"
+            className="text-[0.85rem] text-olive underline decoration-bark/25 underline-offset-4 transition-colors hover:text-ink"
+          >
+            See the quality-by-quality breakdown ↓
+          </a>
+        </div>
+      ) : null}
 
-              <div className="mt-12 grid gap-5 lg:mt-16 lg:grid-cols-12">
-                <div className="glass rounded-[32px] p-5 sm:p-8 lg:col-span-8">
-                  <Duels result={result} />
-                </div>
-                <div className="rounded-[32px] border border-bark/10 bg-white/40 p-5 sm:p-8 lg:col-span-4">
-                  <PositionCheck result={result} />
-                </div>
+      <AnimatePresence initial={false}>
+        {phase === "result" && result ? (
+          <motion.div
+            key="details"
+            id="lab-result"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.9, ease: EASE }}
+            className="overflow-hidden"
+          >
+            <div className="grid gap-5 pt-6 lg:grid-cols-12">
+              <div className="glass rounded-[32px] p-5 sm:p-8 lg:col-span-8">
+                <Duels result={result} />
               </div>
+              <div className="rounded-[32px] border border-bark/10 bg-white/40 p-5 sm:p-8 lg:col-span-4">
+                <PositionCheck result={result} />
+              </div>
+            </div>
 
-              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                {savedAs ? (
-                  <p role="status" className="rounded-full bg-peach px-5 py-3 text-[0.9rem] text-bark">
-                    Saved as {savedAs}. It now counts toward your ELO history.
-                  </p>
-                ) : bIsDraft ? (
-                  <Button variant="ink" onClick={keep}>
-                    Keep B as v{history.length + 1}
-                  </Button>
-                ) : null}
-                <Button variant="outline" onClick={reset}>
-                  Clear result
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3 pb-1">
+              {savedAs ? (
+                <p role="status" className="rounded-full bg-peach px-5 py-3 text-[0.9rem] text-bark">
+                  Saved as {savedAs}. It now counts toward your ELO history.
+                </p>
+              ) : bIsDraft ? (
+                <Button variant="ink" onClick={keep}>
+                  Keep B as v{history.length + 1}
                 </Button>
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-      </div>
+              ) : null}
+              <Button variant="outline" onClick={backToStage}>
+                Compare something else
+              </Button>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
     </section>
   );
 }
