@@ -9,7 +9,9 @@ import { useEffect, useRef, useState } from "react";
 export function useWindowFileDrop(onFile: (file: File) => void) {
   const [dragging, setDragging] = useState(false);
   const handler = useRef(onFile);
-  handler.current = onFile;
+  useEffect(() => {
+    handler.current = onFile;
+  });
 
   useEffect(() => {
     let depth = 0;

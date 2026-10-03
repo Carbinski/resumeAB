@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { useLenis } from "lenis/react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { compareVersions, isSupportedResume, uploadResume } from "@/lib/api";
 import { ACCEPTED_FORMATS } from "@/lib/brand";
 import { cn } from "@/lib/cn";
@@ -15,6 +15,7 @@ import { Button, Magnetic } from "../ui/Button";
 import { EASE, Reveal } from "../ui/Reveal";
 import { SectionHeader } from "../ui/SectionHeader";
 import { Segmented } from "../ui/Segmented";
+import { StepTicker } from "../ui/StepTicker";
 
 type Phase = "setup" | "running" | "result";
 
@@ -167,20 +168,10 @@ export function Lab() {
   const [b, setB] = useState<ResumeVersion | null>(null);
   const [phase, setPhase] = useState<Phase>("setup");
   const [result, setResult] = useState<CompareResult | null>(null);
-  const [step, setStep] = useState(0);
   const [savedAs, setSavedAs] = useState<string | null>(null);
 
   const a = history.find((v) => v.id === aId) ?? current;
   const ready = !!b && b.id !== a.id;
-
-  useEffect(() => {
-    if (phase !== "running") {
-      setStep(0);
-      return;
-    }
-    const id = setInterval(() => setStep((s) => Math.min(s + 1, RUN_STEPS.length - 1)), 750);
-    return () => clearInterval(id);
-  }, [phase]);
 
   const reset = () => {
     setPhase("setup");
@@ -205,6 +196,7 @@ export function Lab() {
     if (!result) return;
     const label = `v${history.length + 1}`;
     addVersion(result.b);
+    setB({ ...result.b, label });
     setSavedAs(label);
   };
 
@@ -302,20 +294,7 @@ export function Lab() {
                 exit={{ opacity: 0, y: -8 }}
                 className="w-full max-w-md text-center"
               >
-                <div className="relative h-7 overflow-hidden text-[1.05rem] text-ink">
-                  <AnimatePresence mode="popLayout" initial={false}>
-                    <motion.p
-                      key={step}
-                      className="absolute inset-x-0"
-                      initial={{ y: 22, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: -22, opacity: 0 }}
-                      transition={{ duration: 0.4 }}
-                    >
-                      {RUN_STEPS[step]}…
-                    </motion.p>
-                  </AnimatePresence>
-                </div>
+                <StepTicker steps={RUN_STEPS} intervalMs={750} className="justify-center text-center" />
                 <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-bark/10">
                   <motion.div
                     className="h-full rounded-full bg-clay"
@@ -372,16 +351,14 @@ export function Lab() {
               </div>
 
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                {bIsDraft ? (
-                  savedAs ? (
-                    <p role="status" className="rounded-full bg-peach px-5 py-3 text-[0.9rem] text-bark">
-                      Saved as {savedAs}. It now counts toward your ELO history.
-                    </p>
-                  ) : (
-                    <Button variant="ink" onClick={keep}>
-                      Keep B as v{history.length + 1}
-                    </Button>
-                  )
+                {savedAs ? (
+                  <p role="status" className="rounded-full bg-peach px-5 py-3 text-[0.9rem] text-bark">
+                    Saved as {savedAs}. It now counts toward your ELO history.
+                  </p>
+                ) : bIsDraft ? (
+                  <Button variant="ink" onClick={keep}>
+                    Keep B as v{history.length + 1}
+                  </Button>
                 ) : null}
                 <Button variant="outline" onClick={reset}>
                   Clear result

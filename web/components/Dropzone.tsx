@@ -2,12 +2,13 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { useLenis } from "lenis/react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { ACCEPTED_FORMATS } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { formatDelta } from "@/lib/elo";
 import { useLadder } from "./LadderProvider";
 import { DeltaChip } from "./ui/DeltaChip";
+import { StepTicker } from "./ui/StepTicker";
 
 export const PROCESSING_STEPS = [
   "Reading the file",
@@ -16,28 +17,9 @@ export const PROCESSING_STEPS = [
   "Fitting your rating",
 ];
 
-/** Cycles through the processing copy while a résumé is being rated. */
-export function useProcessingStep(active: boolean, stepMs = 650) {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    if (!active) {
-      setStep(0);
-      return;
-    }
-    const id = setInterval(
-      () => setStep((s) => Math.min(s + 1, PROCESSING_STEPS.length - 1)),
-      stepMs,
-    );
-    return () => clearInterval(id);
-  }, [active, stepMs]);
-  return step;
-}
-
 export function Dropzone({ dragging }: { dragging: boolean }) {
   const { upload, pickFile, resetUpload } = useLadder();
   const lenis = useLenis();
-  const processing = upload.phase === "processing";
-  const step = useProcessingStep(processing);
 
   useEffect(() => {
     if (upload.phase !== "done") return;
@@ -67,30 +49,10 @@ export function Dropzone({ dragging }: { dragging: boolean }) {
               exit={{ opacity: 0, y: -8 }}
               className="px-5 py-4 sm:px-6"
             >
-              <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-[0.72rem] text-olive">
-                    {upload.fileName}
-                  </p>
-                  <div className="relative mt-1 h-6 overflow-hidden text-[1.02rem] text-ink">
-                    <AnimatePresence mode="popLayout" initial={false}>
-                      <motion.p
-                        key={step}
-                        className="absolute inset-x-0 top-0"
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: -20, opacity: 0 }}
-                        transition={{ duration: 0.4 }}
-                      >
-                        {PROCESSING_STEPS[step]}…
-                      </motion.p>
-                    </AnimatePresence>
-                  </div>
-                </div>
-                <span className="font-mono text-[0.72rem] text-olive">
-                  {step + 1}/{PROCESSING_STEPS.length}
-                </span>
-              </div>
+              <p className="truncate font-mono text-[0.72rem] text-olive">
+                {upload.fileName}
+              </p>
+              <StepTicker steps={PROCESSING_STEPS} intervalMs={650} showCount className="mt-1" />
               <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-bark/10">
                 <motion.div
                   className="h-full rounded-full bg-clay"
