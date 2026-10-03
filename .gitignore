@@ -8,7 +8,8 @@
 credentials.json
 secrets/
 
-# Local resumes and match history
+# Local resumes, accounts, and match history
+data/
 private/
 example_resumes/
 previous_versions/

@@ -7,10 +7,13 @@ export function categoryElo(
   version: ResumeVersion,
   category: CategoryId,
   role: RoleId,
-): number {
+): number | null {
   const base = version.categories[category];
+  if (base == null) return null;
   if (category !== "fit") return base;
-  return base + (version.ratings[role] - version.ratings.overall);
+  const roleRating = version.ratings[role];
+  if (roleRating == null) return base;
+  return base + (roleRating - version.ratings.overall);
 }
 
 export function latest(history: ResumeVersion[]): ResumeVersion {

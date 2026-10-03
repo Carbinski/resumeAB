@@ -94,7 +94,14 @@ function DraftDrop({
     setBusy(true);
     onBusy(true);
     try {
-      onDraft(await uploadResume(file, { baseline, label: "Draft", note: "Draft from the A/B lab." }));
+      onDraft(
+        await uploadResume(file, {
+          baseline,
+          label: "Draft",
+          note: "Draft from the A/B lab.",
+          draft: true,
+        }),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed.");
     } finally {
@@ -186,6 +193,25 @@ export function Lab() {
   const [phase, setPhase] = useState<Phase>("setup");
   const [result, setResult] = useState<CompareResult | null>(null);
   const [savedAs, setSavedAs] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!current) {
+    return (
+      <section id="lab" className="mx-auto max-w-[1180px] px-5 pb-24 sm:px-8 md:pb-32">
+        <SectionHeader
+          index="04"
+          label="A/B lab"
+          title={
+            <>
+              Change one thing. <em className="text-clay">See if it worked.</em>
+            </>
+          }
+        >
+          Upload two versions and Ladder weighs them head to head, in both orders.
+        </SectionHeader>
+      </section>
+    );
+  }
 
   const a = history.find((v) => v.id === aId) ?? current;
   const ready = !!b && b.id !== a.id && !drafting;
@@ -195,6 +221,7 @@ export function Lab() {
     setPhase("setup");
     setResult(null);
     setSavedAs(null);
+    setError(null);
   };
 
   /** Brings the scale and its verdict into view, only if they are not already. */
@@ -213,18 +240,24 @@ export function Lab() {
     if (!b || !ready) return;
     setPhase("running");
     setSavedAs(null);
+    setError(null);
     frameStage();
-    const outcome = await compareVersions(a, b, role);
-    setResult(outcome);
-    setPhase("result");
+    try {
+      const outcome = await compareVersions(a, b, role);
+      setResult(outcome);
+      setPhase("result");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not compare those versions.");
+      setPhase("setup");
+    }
   };
 
-  const keep = () => {
+  const keep = async () => {
     if (!result) return;
-    const label = `v${history.length + 1}`;
-    addVersion(result.b);
-    setB({ ...result.b, label });
-    setSavedAs(label);
+    const published = await addVersion(result.b);
+    if (!published) return;
+    setB(published);
+    setSavedAs(published.label);
   };
 
   const backToStage = () => {
@@ -314,7 +347,7 @@ export function Lab() {
           <div className="mt-2 grid min-h-[15rem] sm:min-h-[12.75rem]">
             <Slot active={phase === "setup"}>
               <p className="max-w-sm text-center text-[1.05rem] leading-snug text-olive">
-                {hint}
+                {error ?? hint}
               </p>
             </Slot>
             <Slot active={phase === "running"}>
@@ -395,7 +428,7 @@ export function Lab() {
                   Saved as {savedAs}. It now counts toward your ELO history.
                 </p>
               ) : bIsDraft ? (
-                <Button variant="ink" onClick={keep}>
+                <Button variant="ink" onClick={() => void keep()}>
                   Keep B as v{history.length + 1}
                 </Button>
               ) : null}

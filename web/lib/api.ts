@@ -1,103 +1,123 @@
 /**
- * The seam between the UI and the rating engine.
- *
- * Every function here resolves from mock data today. To go live, replace the
- * bodies with `fetch` calls that return the same shapes (see `lib/types.ts`).
+ * The seam between the UI and the rating service.
+ * Calls go to `/api/ladder`, which proxies the Python service.
  */
 import { ACCEPTED_FORMATS } from "./brand";
-import { CATEGORIES } from "./categories";
-import { clamp, winProbability } from "./elo";
-import { MOCK_HISTORY } from "./mock/history";
-import { categoryElo } from "./ratings";
-import { ROLES, type RoleId } from "./roles";
-import type {
-  CategoryDuel,
-  CompareResult,
-  OrderResult,
-  ResumeVersion,
-} from "./types";
+import type { RoleId } from "./roles";
+import type { Account, CompareResult, ResumeVersion } from "./types";
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const WAIT_MS = 1500;
+const WAIT_LIMIT_MS = 10 * 60 * 1000;
 
 export function isSupportedResume(fileName: string): boolean {
   const lower = fileName.toLowerCase();
   return ACCEPTED_FORMATS.some((ext) => lower.endsWith(ext));
 }
 
-/** Small deterministic hash so the same file always scores the same in mock mode. */
-function seeded(key: string): () => number {
-  let h = 2166136261;
-  for (let i = 0; i < key.length; i++) {
-    h ^= key.charCodeAt(i);
-    h = Math.imul(h, 16777619);
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`/api/ladder${path}`, {
+    ...init,
+    credentials: "include",
+    headers: {
+      ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+      ...init?.headers,
+    },
+  });
+  if (!response.ok) {
+    let detail = "Something went wrong.";
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      // Keep the fallback.
+    }
+    throw new Error(detail);
   }
-  return () => {
-    h ^= h << 13;
-    h ^= h >>> 17;
-    h ^= h << 5;
-    return ((h >>> 0) % 10_000) / 10_000;
-  };
+  return (await response.json()) as T;
 }
 
 export async function getHistory(): Promise<ResumeVersion[]> {
-  return MOCK_HISTORY;
+  const response = await fetch("/api/ladder/versions", { credentials: "include", cache: "no-store" });
+  if (response.status === 401) return [];
+  if (!response.ok) throw new Error("Could not load your résumés.");
+  return (await response.json()) as ResumeVersion[];
+}
+
+export async function getMe(): Promise<Account | null> {
+  const response = await fetch("/api/ladder/me", { credentials: "include", cache: "no-store" });
+  if (response.status === 401) return null;
+  if (!response.ok) throw new Error("Could not load your account.");
+  return (await response.json()) as Account;
+}
+
+export interface SignupInput {
+  email: string;
+  password: string;
+  nameOnResume: string;
+  level: "intern" | "newgrad";
+  industry: string;
+  company: string;
+}
+
+export function signup(input: SignupInput): Promise<Account> {
+  return request("/auth/signup", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function login(email: string, password: string): Promise<Account> {
+  return request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+}
+
+export function logout(): Promise<{ ok: boolean }> {
+  return request("/auth/logout", { method: "POST" });
+}
+
+export function updateProfile(input: Omit<SignupInput, "email" | "password">): Promise<Account> {
+  return request("/me", { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function deleteAccount(): Promise<{ ok: boolean }> {
+  return request("/me", { method: "DELETE" });
 }
 
 export interface UploadOptions {
-  /** The version the new one is rated against. */
-  baseline: ResumeVersion;
-  label: string;
+  /** The version the new one is rated against. Unused by the service; kept for the lab call site. */
+  baseline?: ResumeVersion;
+  label?: string;
   note?: string;
+  /** A lab draft is stored but not placed on the ladder until it is kept. */
+  draft?: boolean;
 }
 
-/** Parses and rates one résumé file. */
-export async function uploadResume(
-  file: File,
-  { baseline, label, note }: UploadOptions,
-): Promise<ResumeVersion> {
+/** Parses and rates one résumé file. Drafts return before any pool matchups. */
+export async function uploadResume(file: File, options: UploadOptions = {}): Promise<ResumeVersion> {
   if (!isSupportedResume(file.name)) {
     throw new Error(`Unsupported file type. Use ${ACCEPTED_FORMATS.join(", ")}.`);
   }
-  await wait(2600);
-
-  const rand = seeded(`${file.name}:${file.size}:${file.lastModified}`);
-  const overallShift = Math.round(-45 + rand() * 150);
-
-  const ratings = Object.fromEntries(
-    ROLES.map(({ id }) => {
-      const shift = id === "overall" ? overallShift : overallShift + Math.round((rand() - 0.5) * 50);
-      return [id, baseline.ratings[id] + shift];
-    }),
-  ) as Record<RoleId, number>;
-
-  const categories = Object.fromEntries(
-    CATEGORIES.map(({ id }) => [
-      id,
-      Math.round(baseline.categories[id] + overallShift + (rand() - 0.5) * 70),
-    ]),
-  ) as ResumeVersion["categories"];
-
-  return {
-    id: `up-${Date.now().toString(36)}`,
-    label,
-    fileName: file.name,
-    uploadedAt: new Date().toISOString(),
-    note: note ?? "Uploaded just now.",
-    ratings,
-    categories,
-  };
+  const body = new FormData();
+  body.append("file", file);
+  body.append("note", options.note ?? "");
+  body.append("draft", options.draft ? "true" : "false");
+  const created = await request<ResumeVersion>("/versions", { method: "POST", body });
+  if (options.draft) return created;
+  return waitForVersion(created.id, (version) => version.standing.status !== "placing");
 }
 
-function orderResult(left: "a" | "b", noul: number): OrderResult {
-  const p = clamp(noul, 0.02, 0.98);
-  return {
-    left,
-    choice: p >= 0.5 ? "left" : "right",
-    probabilities: { left: p, right: 1 - p },
-    confidence: Math.abs(2 * p - 1),
-    noul: p,
-    model: "mock-judge-1",
-  };
+export async function publishVersion(id: string): Promise<ResumeVersion> {
+  await request<ResumeVersion>(`/versions/${id}/publish`, { method: "POST" });
+  return waitForVersion(id, (version) => version.standing.status !== "placing");
+}
+
+export async function rateRole(id: string, role: Exclude<RoleId, "overall">): Promise<ResumeVersion> {
+  await request<ResumeVersion>(`/versions/${id}/roles/${role}`, { method: "POST" });
+  const version = await waitForVersion(id, (item) => {
+    const run = item.roleStatus[role];
+    return run != null && run.status !== "placing";
+  });
+  const run = version.roleStatus[role];
+  if (run?.status === "error") {
+    throw new Error(run.message || "The judge could not rate this role.");
+  }
+  return version;
 }
 
 /** Head-to-head between two versions for one role, in both reading orders. */
@@ -105,30 +125,31 @@ export async function compareVersions(
   a: ResumeVersion,
   b: ResumeVersion,
   role: RoleId,
+  jd?: string,
 ): Promise<CompareResult> {
-  await wait(3400);
-
-  const eloA = a.ratings[role];
-  const eloB = b.ratings[role];
-  const pA = winProbability(eloA, eloB);
-  const rand = seeded(`${a.id}:${b.id}:${role}`);
-  // A positive bias favours whichever résumé is shown on the left.
-  const bias = (rand() - 0.5) * 0.14;
-
-  const categories: CategoryDuel[] = CATEGORIES.map(({ id }) => {
-    const ca = categoryElo(a, id, role);
-    const cb = categoryElo(b, id, role);
-    return { id, pB: winProbability(cb, ca), eloA: ca, eloB: cb };
+  return request("/compare", {
+    method: "POST",
+    body: JSON.stringify({ aId: a.id, bId: b.id, role, jd: jd ?? null }),
   });
+}
 
-  return {
-    a,
-    b,
-    role,
-    pB: 1 - pA,
-    eloA,
-    eloB,
-    orders: [orderResult("a", pA + bias), orderResult("b", 1 - pA + bias)],
-    categories,
-  };
+async function waitForVersion(
+  id: string,
+  ready: (version: ResumeVersion) => boolean,
+): Promise<ResumeVersion> {
+  const deadline = Date.now() + WAIT_LIMIT_MS;
+  for (;;) {
+    const history = await getHistory();
+    const version = history.find((item) => item.id === id);
+    if (version && ready(version)) {
+      if (version.standing.status === "error") {
+        throw new Error(version.standing.message || "The judge could not rate this résumé.");
+      }
+      return version;
+    }
+    if (Date.now() > deadline) {
+      throw new Error("Rating is still running. It will finish in the background.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, WAIT_MS));
+  }
 }

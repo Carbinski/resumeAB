@@ -8,6 +8,10 @@ import { ELO_CENTER, formatDelta } from "@/lib/elo";
 import { formatDate } from "@/lib/ratings";
 import { ROLE_BY_ID, type RoleId } from "@/lib/roles";
 import type { ResumeVersion } from "@/lib/types";
+
+function scoreOf(version: ResumeVersion, role: RoleId): number {
+  return version.ratings[role] ?? version.ratings.overall;
+}
 import { useElementWidth } from "@/lib/useElementWidth";
 import { EASE } from "./ui/Reveal";
 
@@ -40,7 +44,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
       .domain([t0 - spanPad, t1 + spanPad])
       .range([m.left + 16, width - m.right - 16]);
 
-    const values = versions.flatMap((v) => [v.ratings[role], v.ratings.overall]);
+    const values = versions.flatMap((v) => [scoreOf(v, role), v.ratings.overall]);
     const y = scaleLinear()
       .domain([Math.min(...values) - 28, Math.max(...values) + 28])
       .nice(4)
@@ -50,7 +54,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
     const roleLine =
       line<ResumeVersion>()
         .x(px)
-        .y((v) => y(v.ratings[role]))
+        .y((v) => y(scoreOf(v, role)))
         .curve(curveMonotoneX)(versions) ?? "";
     const overallLine =
       line<ResumeVersion>()
@@ -61,7 +65,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
       area<ResumeVersion>()
         .x(px)
         .y0(height - m.bottom)
-        .y1((v) => y(v.ratings[role]))
+        .y1((v) => y(scoreOf(v, role)))
         .curve(curveMonotoneX)(versions) ?? "";
 
     return { x, y, px, roleLine, overallLine, roleArea };
@@ -73,8 +77,10 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
   const activeIndex = history.findIndex((v) => v.id === active.id);
   const before = activeIndex > 0 ? history[activeIndex - 1] : undefined;
   const ax = px(active);
-  const ay = y(active.ratings[role]);
-  const delta = before ? active.ratings[role] - before.ratings[role] : 0;
+  const ay = y(scoreOf(active, role));
+  const beforeScore = before ? before.ratings[role] : null;
+  const activeScore = active.ratings[role];
+  const delta = beforeScore != null && activeScore != null ? activeScore - beforeScore : 0;
   const ticks = y.ticks(4);
   const showCenter = ELO_CENTER > y.domain()[0] && ELO_CENTER < y.domain()[1];
 
@@ -111,7 +117,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label={`${ROLE_BY_ID[role].label} ELO across ${versions.length} résumé versions. Currently ${active.ratings[role]} at ${active.label}.`}
+        aria-label={`${ROLE_BY_ID[role].label} ELO across ${versions.length} résumé versions. Currently ${scoreOf(active, role)} at ${active.label}.`}
         tabIndex={0}
         className="touch-pan-y overflow-visible outline-offset-8"
         onPointerMove={(e) => nearest(e.clientX)}
@@ -233,11 +239,11 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
                 fill={isActive ? "#BC7767" : "#F7F6F5"}
                 stroke="#2A221C"
                 strokeWidth={isActive ? 0 : 1.8}
-                initial={{ opacity: 0, cx: px(v), cy: y(v.ratings[role]) }}
+                initial={{ opacity: 0, cx: px(v), cy: y(scoreOf(v, role)) }}
                 animate={{
                   opacity: inView ? 1 : 0,
                   cx: px(v),
-                  cy: y(v.ratings[role]),
+                  cy: y(scoreOf(v, role)),
                 }}
                 transition={{
                   opacity: { duration: 0.5, delay: 0.5 + i * 0.16 },
@@ -298,7 +304,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
               ) : null}
             </div>
             <p className="font-display mt-0.5 text-[1.9rem] leading-none text-ink">
-              {active.ratings[role]}
+              {scoreOf(active, role)}
             </p>
             <p className="mt-1.5 text-[0.74rem] leading-snug text-olive">{active.note}</p>
           </div>
