@@ -16,10 +16,10 @@ log.setLevel(logging.INFO)
 
 def log_resume_text(*, stage: str, filename: str, text: str, resume_id: str | None = None) -> None:
     """Record the full text for one stage: ``extracted`` or ``redacted``."""
-    identity = f"id={resume_id} " if resume_id else ""
+    identity = f" id={resume_id}" if resume_id else ""
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     log.info(
-        "----- %s %s%sfile=%s chars=%d -----\n%s\n----- end %s -----",
+        "----- %s %s%s file=%s chars=%d -----\n%s\n----- end %s -----",
         stamp,
         stage,
         identity,
