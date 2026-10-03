@@ -3,6 +3,7 @@ import { Nav } from "@/components/Nav";
 import { SmoothScroll } from "@/components/SmoothScroll";
 import { Hero } from "@/components/sections/Hero";
 import { Rating } from "@/components/sections/Rating";
+import { Roles } from "@/components/sections/Roles";
 import { getHistory } from "@/lib/api";
 
 export default async function Home() {
@@ -15,6 +16,7 @@ export default async function Home() {
         <main className="m-2 overflow-clip rounded-[28px] border border-bark/10 bg-cream md:m-3 md:rounded-[44px]">
           <Hero />
           <Rating />
+          <Roles />
         </main>
       </LadderProvider>
     </SmoothScroll>
