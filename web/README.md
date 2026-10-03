@@ -7,7 +7,7 @@ Frontend for the résumé ELO tool in the parent repo. One editorial page coveri
 3. Role lens: Overall, AI & ML, Cloud Ops and Full-stack ratings.
 4. A/B lab: compare two versions on a balance scale, with a verdict, six quality duels and a left/right position check.
 
-Everything runs on mock data. No backend is required.
+Ratings come from the Python service in the parent package (`python -m resume_ab.api` on port 8000). The browser calls `/api/ladder`, which proxies that service and forwards the session cookie.
 
 ## Run it
 
@@ -19,21 +19,21 @@ npm run lint
 npm run build
 ```
 
-## Where the mock data plugs in
+Start the API first, with `TYPESAFE_API_KEY` set. Without it the page still loads, and uploads fail when a matchup is actually judged.
 
-All data flows through [`lib/api.ts`](lib/api.ts). Its functions return the shapes in [`lib/types.ts`](lib/types.ts), which mirror the Python package (`OrderResult` matches `resume_ab/compare.py`, and the Elo constants in [`lib/elo.ts`](lib/elo.ts) match `resume_ab/rating.py`).
+## Where data comes from
 
-| Function | Today | To go live |
-| --- | --- | --- |
-| `getHistory()` | returns `lib/mock/history.ts` | fetch the user's rated versions |
-| `uploadResume(file, opts)` | fakes parsing and a deterministic rating | upload the file, return a rated `ResumeVersion` |
-| `compareVersions(a, b, role)` | derives a result from the Elo gap | run the two-order comparison and return `CompareResult` |
+All data flows through [`lib/api.ts`](lib/api.ts). Shapes live in [`lib/types.ts`](lib/types.ts). `OrderResult` matches `resume_ab/compare.py`, and the Elo constants in [`lib/elo.ts`](lib/elo.ts) match `resume_ab/rating.py`.
 
-`getHistory` runs on the server in `app/page.tsx`. The other two run in the browser, so swap them for `fetch` calls to route handlers.
+| Function | What it does |
+| --- | --- |
+| `getHistory()` | The signed-in user's published versions |
+| `uploadResume(file, opts)` | Stores the file, redacts contact details, and rates it against the pool |
+| `compareVersions(a, b, role)` | Two-order comparison, including the six quality questions |
 
 ### Categories
 
-The six quality categories (Impact, Technical depth, Leadership, Role fit, Trajectory, Signal clarity) are invented and live in [`lib/categories.ts`](lib/categories.ts). Each has a `judgePrompt`, which is the question a backend `Choice` would ask. Adding one backend question per category in `build_questions` in `resume_ab/compare.py` is all the engine needs to feed the category duels.
+The six quality categories (Impact, Technical depth, Leadership, Role fit, Trajectory, Signal clarity) live in [`lib/categories.ts`](lib/categories.ts). Personal comparisons ask each one in the same Jev request as the headline choice. Pool matchups stay headline-only.
 
 ## Design notes
 

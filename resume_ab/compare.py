@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
+
+from resume_ab.categories import FIT_WITHOUT_ROLE, PROMPTS
 from resume_ab.load import Document, content_sha256
 from typesafe_sdk import Choice, Noul, TypeSafeClient
 
@@ -15,6 +17,7 @@ class OrderResult:
     choice: dict
     noul: float  # probability the left resume is stronger
     model: str  # versioned id from the response, not the alias
+    categories: dict[str, dict] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -23,7 +26,7 @@ class CompareResult:
     second: OrderResult
 
 
-def build_questions(*, has_role: bool) -> dict:
+def build_questions(*, has_role: bool, categories: bool = False) -> dict:
     if has_role:
         choice = "Which resume is the stronger application for the role in `role_description`?"
         noul = (
@@ -36,10 +39,18 @@ def build_questions(*, has_role: bool) -> dict:
     dating = " Treat `present_date` as today's date when judging recency and date ranges."
     choice += dating
     noul += dating
-    return {
+    questions: dict = {
         "choice": Choice(instructions=choice, criteria={"left": None, "right": None}),
         "noul": Noul(instructions=noul),
     }
+    if categories:
+        for category_id, prompt in PROMPTS:
+            if category_id == "fit" and not has_role:
+                prompt = FIT_WITHOUT_ROLE
+            questions[category_id] = Choice(
+                instructions=prompt + dating, criteria={"left": None, "right": None}
+            )
+    return questions
 
 
 def build_state(
@@ -55,24 +66,41 @@ def build_state(
     return state
 
 
-def call_jev(state: dict, questions: dict) -> tuple[str, dict, float]:
-    """Returns ``(model_id, choice_payload, noul_probability)``. Reads ``TYPESAFE_API_KEY``."""
+def call_jev(state: dict, questions: dict) -> tuple[str, dict, float, dict[str, dict]]:
+    """Returns ``(model_id, choice_payload, noul_probability, category_payloads)``.
+
+    Reads ``TYPESAFE_API_KEY``. Category payloads are empty unless those questions
+    were included. Every question still goes out in this single request.
+    """
     with TypeSafeClient() as client:
         response = client.system_one(state=state, questions=questions, model="jev-latest")
-    if len(response.choices) != 1 or len(response.nouls) != 1:
-        raise ValueError("expected one Choice answer and one Noul answer")
-    choice = next(iter(response.choices.values()))
+    if len(response.nouls) != 1:
+        raise ValueError("expected one Noul answer")
+    choices = {key: value.model_dump() for key, value in response.choices.items()}
+    if "choice" in choices:
+        choice = choices["choice"]
+    elif len(choices) == 1:
+        choice = next(iter(choices.values()))
+    else:
+        raise ValueError("expected a Choice answer")
     noul = next(iter(response.nouls.values()))
-    return response.model, choice.model_dump(), noul.noul
+    categories = {key: value for key, value in choices.items() if key not in {"choice"}}
+    return response.model, choice, noul.noul, categories
 
 
-def compare_resumes(left: Document, right: Document, role_description: str | None) -> CompareResult:
+def compare_resumes(
+    left: Document,
+    right: Document,
+    role_description: str | None,
+    *,
+    categories: bool = False,
+) -> CompareResult:
     """Runs both orders to expose position bias. Results are left unaggregated on purpose."""
-    questions = build_questions(has_role=role_description is not None)
+    questions = build_questions(has_role=role_description is not None, categories=categories)
     today = date.today()
 
     def one_order(shown_left: Document, shown_right: Document) -> OrderResult:
-        model, choice, noul = call_jev(
+        model, choice, noul, category_payloads = call_jev(
             build_state(shown_left, shown_right, role_description, today), questions
         )
         return OrderResult(
@@ -81,6 +109,7 @@ def compare_resumes(left: Document, right: Document, role_description: str | Non
             choice=choice,
             noul=noul,
             model=model,
+            categories=category_payloads,
         )
 
     return CompareResult(first=one_order(left, right), second=one_order(right, left))
@@ -89,6 +118,19 @@ def compare_resumes(left: Document, right: Document, role_description: str | Non
 def aggregate_result(result: CompareResult) -> float:
     """Probability ``first``'s left resume is stronger, averaged over both orders."""
     return (result.first.noul + (1 - result.second.noul)) / 2
+
+
+def aggregate_categories(result: CompareResult) -> dict[str, float]:
+    """Probability ``first``'s left resume wins each category, averaged over both orders."""
+    scores: dict[str, float] = {}
+    for category_id, choice in result.first.categories.items():
+        other = result.second.categories.get(category_id)
+        if other is None:
+            continue
+        left_when_left = float(choice["probabilities"]["left"])
+        left_when_right = float(other["probabilities"]["right"])
+        scores[category_id] = (left_when_left + left_when_right) / 2
+    return scores
 
 
 def format_report(left_name: str, right_name: str, result: CompareResult) -> str:

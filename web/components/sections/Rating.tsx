@@ -6,6 +6,8 @@ import { ROLES, ROLE_BY_ID } from "@/lib/roles";
 import { Anatomy } from "../Anatomy";
 import { EloChart } from "../EloChart";
 import { useLadder } from "../LadderProvider";
+import { Standing } from "./Standing";
+import { Button } from "../ui/Button";
 import { DeltaChip } from "../ui/DeltaChip";
 import { Odometer } from "../ui/Odometer";
 import { Reveal } from "../ui/Reveal";
@@ -21,11 +23,12 @@ const RANGES = [
 ] as const;
 
 export function Rating() {
-  const { history, role, setRole } = useLadder();
+  const { history, role, setRole, rateForRole, roleRun } = useLadder();
   const [range, setRange] = useState<Range>("all");
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const versions = useMemo(() => {
+    if (history.length === 0) return [];
     if (range === "all") return history;
     const last = new Date(history[history.length - 1].uploadedAt);
     const cutoff = new Date(last);
@@ -33,6 +36,26 @@ export function Rating() {
     const inRange = history.filter((v) => new Date(v.uploadedAt) >= cutoff);
     return inRange.length >= 2 ? inRange : history.slice(-2);
   }, [history, range]);
+
+  const chartVersions = versions.filter((version) => version.ratings[role] != null);
+  if (history.length === 0) {
+    return (
+      <section id="rating" className="mx-auto max-w-[1180px] px-5 py-20 sm:px-8 md:py-28">
+        <SectionHeader
+          index="02"
+          label="Your rating"
+          title={
+            <>
+              Your ELO, <em className="text-clay">over time.</em>
+            </>
+          }
+        >
+          Upload a résumé and it is rated against other interns or new grads, eight
+          matchups at a time.
+        </SectionHeader>
+      </section>
+    );
+  }
 
   const active = versions.find((v) => v.id === activeId) ?? versions[versions.length - 1];
   const index = history.findIndex((v) => v.id === active.id);
@@ -83,7 +106,7 @@ export function Rating() {
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-clay" />
                     {ROLE_BY_ID[role].label}:{" "}
-                    <span className="font-mono text-ink">{active.ratings[role]}</span>
+                    <span className="font-mono text-ink">{active.ratings[role] ?? "—"}</span>
                   </motion.p>
                 ) : (
                   <motion.p
@@ -122,14 +145,32 @@ export function Rating() {
           </div>
 
           <div className="mt-6 -mx-1">
-            <EloChart
-              key={range}
-              versions={versions}
-              history={history}
-              role={role}
-              activeId={active.id}
-              onActive={setActiveId}
-            />
+            {chartVersions.length > 0 ? (
+              <EloChart
+                key={range}
+                versions={chartVersions}
+                history={history}
+                role={role}
+                activeId={chartVersions.some((version) => version.id === active.id) ? active.id : chartVersions[chartVersions.length - 1].id}
+                onActive={setActiveId}
+              />
+            ) : (
+              <div className="rounded-3xl border border-dashed border-bark/20 px-5 py-8">
+                <p className="text-[0.95rem] text-olive">
+                  {ROLE_BY_ID[role].label} has not been rated yet. It uses the same eight-matchup
+                  budget, only when you ask for it.
+                </p>
+                <Button
+                  className="mt-4"
+                  disabled={roleRun != null || role === "overall"}
+                  onClick={() => {
+                    if (role !== "overall") void rateForRole(role);
+                  }}
+                >
+                  {roleRun === role ? "Rating…" : `Rate latest for ${ROLE_BY_ID[role].label}`}
+                </Button>
+              </div>
+            )}
           </div>
         </Reveal>
 
@@ -137,6 +178,7 @@ export function Rating() {
           <Anatomy version={active} before={before} role={role} />
         </Reveal>
       </div>
+      <Standing version={active} />
     </section>
   );
 }
