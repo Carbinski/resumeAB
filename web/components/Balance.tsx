@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion, type Transition } from "motion/react";
 import { clamp } from "@/lib/elo";
 import { cn } from "@/lib/cn";
 import type { ResumeVersion } from "@/lib/types";
@@ -13,22 +13,24 @@ function Pan({
   version,
   role,
   winner,
-  tilt,
+  counter,
+  transition,
   empty,
 }: {
   tag: "A" | "B";
   version: ResumeVersion | null;
   role: RoleId;
   winner: boolean;
-  tilt: number;
+  counter: number | number[];
+  transition: Transition;
   empty: string;
 }) {
   return (
     <motion.div
       className="absolute left-0 top-0 w-[132px] sm:w-[188px]"
       style={{ x: "-50%", originX: 0.5, originY: 0 }}
-      animate={{ rotate: -tilt }}
-      transition={{ type: "spring", stiffness: 38, damping: 5.5, mass: 1.1 }}
+      animate={{ rotate: counter }}
+      transition={transition}
     >
       <svg viewBox="0 0 100 64" className="mx-auto block h-14 w-full" preserveAspectRatio="none" aria-hidden>
         <path
@@ -86,14 +88,13 @@ export function Balance({
   const winnerB = phase === "result" && pB !== null && pB >= 0.55;
   const winnerA = phase === "result" && pB !== null && pB <= 0.45;
 
-  const animate =
-    phase === "running"
-      ? { rotate: [0, -7, 6, -4, 3, -1, 0] }
-      : { rotate: angle };
-  const transition =
-    phase === "running"
-      ? { duration: 2.2, repeat: Infinity, ease: "easeInOut" as const }
-      : { type: "spring" as const, stiffness: 38, damping: 5.5, mass: 1.1 };
+  const sway = [0, -7, 6, -4, 3, -1, 0];
+  const running = phase === "running";
+  const beam = running ? sway : angle;
+  const counter = running ? sway.map((d) => -d) : -angle;
+  const transition: Transition = running
+    ? { duration: 2.2, repeat: Infinity, ease: "easeInOut" }
+    : { type: "spring", stiffness: 38, damping: 5.5, mass: 1.1 };
 
   return (
     <div className="relative mx-auto h-[360px] w-full max-w-[760px] sm:h-[400px]" aria-hidden={false}>
@@ -102,7 +103,7 @@ export function Balance({
 
       <motion.div
         className="absolute inset-x-[16%] top-[96px] h-[4px] rounded-full bg-ink sm:inset-x-[9%]"
-        animate={animate}
+        animate={{ rotate: beam }}
         transition={transition}
       >
         <span className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-cream bg-clay shadow" />
@@ -112,7 +113,8 @@ export function Balance({
             version={a}
             role={role}
             winner={winnerA}
-            tilt={phase === "running" ? 0 : angle}
+            counter={counter}
+            transition={transition}
             empty="Pick a baseline"
           />
         </div>
@@ -122,7 +124,8 @@ export function Balance({
             version={b}
             role={role}
             winner={winnerB}
-            tilt={phase === "running" ? 0 : angle}
+            counter={counter}
+            transition={transition}
             empty="Add the edited version"
           />
         </div>

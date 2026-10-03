@@ -2,6 +2,7 @@ import { LadderProvider } from "@/components/LadderProvider";
 import { Nav } from "@/components/Nav";
 import { SmoothScroll } from "@/components/SmoothScroll";
 import { Hero } from "@/components/sections/Hero";
+import { Lab } from "@/components/sections/Lab";
 import { Rating } from "@/components/sections/Rating";
 import { Roles } from "@/components/sections/Roles";
 import { getHistory } from "@/lib/api";
@@ -17,6 +18,7 @@ export default async function Home() {
           <Hero />
           <Rating />
           <Roles />
+          <Lab />
         </main>
       </LadderProvider>
     </SmoothScroll>
