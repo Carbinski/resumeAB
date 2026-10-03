@@ -150,7 +150,7 @@ function OrbitStage({ dragging }: { dragging: boolean }) {
 
   return (
     <div
-      className="relative mx-auto h-[600px] w-full max-w-[1020px] sm:h-[560px]"
+      className="relative mx-auto h-[670px] w-full max-w-[1020px] sm:h-[560px]"
       onPointerMove={(e) => {
         if (reduce || e.pointerType === "touch") return;
         const r = e.currentTarget.getBoundingClientRect();
