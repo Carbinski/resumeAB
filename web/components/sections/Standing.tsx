@@ -42,10 +42,10 @@ export function Standing({ version }: { version: ResumeVersion }) {
         </div>
         <p className="max-w-sm text-[0.88rem] leading-snug text-olive">
           {standing.status === "placing"
-            ? `Placing this résumé · ${standing.matchesPlayed} of ${standing.matchBudget} matchups.`
+            ? `Placing this resume · ${standing.matchesPlayed} of ${standing.matchBudget} matchups.`
             : percentile == null
-              ? "You're the first placed résumé in this pool."
-              : `About the ${ordinal(percentile)} percentile of ${level.toLowerCase()} résumés.`}
+              ? "You're the first placed resume in this pool."
+              : `About the ${ordinal(percentile)} percentile of ${level.toLowerCase()} resumes.`}
           {standing.status === "provisional"
             ? " Provisional — a few matchups are still running."
             : ""}
@@ -91,7 +91,7 @@ export function Standing({ version }: { version: ResumeVersion }) {
           ))}
         </ul>
       ) : standing.status !== "placing" ? (
-        <p className="mt-5 text-[0.86rem] text-olive">No other résumés in the neighboring bands yet.</p>
+        <p className="mt-5 text-[0.86rem] text-olive">No other resumes in the neighboring bands yet.</p>
       ) : null}
 
       {standing.status === "error" && standing.message ? (

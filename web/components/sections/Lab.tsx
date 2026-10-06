@@ -20,7 +20,7 @@ import { StepTicker } from "../ui/StepTicker";
 type Phase = "setup" | "running" | "result";
 
 const RUN_STEPS = [
-  "Reading both résumés",
+  "Reading both resumes",
   "A on the left, B on the right",
   "Swapping sides to check for bias",
   "Weighing six qualities",
@@ -284,7 +284,7 @@ export function Lab() {
           </>
         }
       >
-        Put your current résumé on one side and the edited version on the
+        Put your current resume on one side and the edited version on the
         other. Ladder weighs them head to head, in both orders, on six
         qualities.
       </SectionHeader>

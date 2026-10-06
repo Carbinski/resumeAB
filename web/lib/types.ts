@@ -1,7 +1,7 @@
 import type { CategoryId } from "./categories";
 import type { RoleId } from "./roles";
 
-/** Everything the rating engine says about one résumé version. */
+/** Everything the rating engine says about one resume version. */
 export interface RoleRatings {
   /** Elo for the intern or new-grad pool. Always present once a version is saved. */
   overall: number;
@@ -34,7 +34,7 @@ export interface Standing {
   status: "placing" | "provisional" | "rated" | "error";
   message: string | null;
   band: string;
-  /** Share of other placed résumés strictly below this one, rounded to 5%. */
+  /** Share of other placed resumes strictly below this one, rounded to 5%. */
   percentile: number | null;
   histogram: { id: string; label: string; count: number }[];
   neighbors: NeighborCard[];
@@ -71,7 +71,7 @@ export interface OrderResult {
   choice: "left" | "right";
   probabilities: { left: number; right: number };
   confidence: number;
-  /** Probability the left résumé is stronger. */
+  /** Probability the left resume is stronger. */
   noul: number;
   model: string;
 }

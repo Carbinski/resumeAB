@@ -50,7 +50,7 @@ export function Rating() {
             </>
           }
         >
-          Upload a résumé and it is rated against other interns or new grads, eight
+          Upload a resume and it is rated against other interns or new grads, eight
           matchups at a time.
         </SectionHeader>
       </section>

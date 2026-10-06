@@ -21,7 +21,7 @@ const instrument = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: `${BRAND.name} — Know where your résumé really stands`,
+  title: `${BRAND.name} — Know where your resume really stands`,
   description: BRAND.description,
 };
 

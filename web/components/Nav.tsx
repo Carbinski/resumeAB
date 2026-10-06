@@ -76,7 +76,7 @@ export function Nav() {
               onClick={pickFile}
               className={buttonClass("ink", "h-10 px-5 text-[0.85rem]")}
             >
-              Upload résumé
+              Upload resume
             </button>
           </Magnetic>
         </div>

@@ -9,7 +9,7 @@ export function winProbability(a: number, b: number): number {
   return 1 / (1 + 10 ** ((b - a) / ELO_SCALE));
 }
 
-/** How often a résumé at `elo` beats the average résumé in the pool. */
+/** How often a resume at `elo` beats the average resume in the pool. */
 export function beatsAverage(elo: number): number {
   return winProbability(elo, ELO_CENTER);
 }

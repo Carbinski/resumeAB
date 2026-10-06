@@ -117,7 +117,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label={`${ROLE_BY_ID[role].label} ELO across ${versions.length} résumé versions. Currently ${scoreOf(active, role)} at ${active.label}.`}
+        aria-label={`${ROLE_BY_ID[role].label} ELO across ${versions.length} resume versions. Currently ${scoreOf(active, role)} at ${active.label}.`}
         tabIndex={0}
         className="touch-pan-y overflow-visible outline-offset-8"
         onPointerMove={(e) => nearest(e.clientX)}
@@ -180,7 +180,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
               textAnchor="end"
               className="fill-olive text-[10px] uppercase tracking-[0.14em]"
             >
-              Average résumé
+              Average resume
             </text>
           </g>
         )}

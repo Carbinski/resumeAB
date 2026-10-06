@@ -39,7 +39,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export async function getHistory(): Promise<ResumeVersion[]> {
   const response = await fetch("/api/ladder/versions", { credentials: "include", cache: "no-store" });
   if (response.status === 401) return [];
-  if (!response.ok) throw new Error("Could not load your résumés.");
+  if (!response.ok) throw new Error("Could not load your resumes.");
   return (await response.json()) as ResumeVersion[];
 }
 
@@ -88,7 +88,7 @@ export interface UploadOptions {
   draft?: boolean;
 }
 
-/** Parses and rates one résumé file. Drafts return before any pool matchups. */
+/** Parses and rates one resume file. Drafts return before any pool matchups. */
 export async function uploadResume(file: File, options: UploadOptions = {}): Promise<ResumeVersion> {
   if (!isSupportedResume(file.name)) {
     throw new Error(`Unsupported file type. Use ${ACCEPTED_FORMATS.join(", ")}.`);
@@ -143,7 +143,7 @@ async function waitForVersion(
     const version = history.find((item) => item.id === id);
     if (version && ready(version)) {
       if (version.standing.status === "error") {
-        throw new Error(version.standing.message || "The judge could not rate this résumé.");
+        throw new Error(version.standing.message || "The judge could not rate this resume.");
       }
       return version;
     }

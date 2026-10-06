@@ -132,7 +132,7 @@ function Rung({
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 pl-8 text-[0.82rem] text-olive">
           <span>
-            Beats the average résumé{" "}
+            Beats the average resume{" "}
             <span className="text-ink">{formatPercent(beatsAverage(now))}</span> of the time
           </span>
           {series.length > 0 ? (
@@ -149,7 +149,7 @@ function Rung({
             disabled={roleRun != null}
             onClick={() => void rateForRole(roleId)}
           >
-            {roleRun === roleId ? "Rating…" : "Rate your latest résumé"}
+            {roleRun === roleId ? "Rating…" : "Rate your latest resume"}
           </Button>
         </div>
       ) : null}
@@ -176,7 +176,7 @@ function AddRole() {
       const result = await compareVersions(previous, current, "overall", text.trim());
       const percent = Math.round(result.pB * 100);
       setMessage(
-        `Your latest résumé wins ${percent}% of the time against ${previous.label} for this description.`,
+        `Your latest resume wins ${percent}% of the time against ${previous.label} for this description.`,
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not rate this description.");
@@ -245,7 +245,7 @@ export function Roles() {
         label="Role lens"
         title={
           <>
-            One résumé, <em className="text-clay">different markets.</em>
+            One resume, <em className="text-clay">different markets.</em>
           </>
         }
       >

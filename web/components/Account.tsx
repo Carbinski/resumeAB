@@ -28,7 +28,7 @@ export function Account() {
       return;
     }
     if (mode === "signup" && nameOnResume.trim().length < 2) {
-      setError("Enter the name as it appears on your résumé.");
+      setError("Enter the name as it appears on your resume.");
       return;
     }
     setBusy(true);
@@ -85,7 +85,7 @@ export function Account() {
         <p className="mt-3 text-[0.9rem] leading-relaxed text-olive">
           {user
             ? "Level and industry decide who appears around you. Company is shown on your anonymous card."
-            : "Intern and new grad only. The name is used to strip it from the résumé before anything is scored."}
+            : "Intern and new grad only. The name is used to strip it from the resume before anything is scored."}
         </p>
         {offline ? (
           <p className="mt-3 text-[0.86rem] text-clay" role="status">
@@ -229,7 +229,7 @@ function ProfileFields({
   return (
     <div className="mt-4 grid gap-3">
       <label className="grid gap-1.5 text-[0.78rem] text-olive">
-        Name as it appears on your résumé
+        Name as it appears on your resume
         <input
           className={fieldClass}
           value={nameOnResume}
