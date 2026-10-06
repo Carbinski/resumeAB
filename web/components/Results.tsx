@@ -236,7 +236,7 @@ export function PositionCheck({ result }: { result: CompareResult }) {
         </span>
       </div>
       <p className="mt-3 text-[0.88rem] leading-relaxed text-olive">
-        Each résumé is shown on the left once and on the right once, so a
+        Each resume is shown on the left once and on the right once, so a
         lean toward one side {`can't`} decide the result. Both readings agree{" "}
         <span className="text-ink">{formatPercent(agreement)}</span>.
       </p>

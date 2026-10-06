@@ -122,7 +122,7 @@ function Rung({
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 pl-8 text-[0.82rem] text-olive">
           <span>
-            Beats the average résumé{" "}
+            Beats the average resume{" "}
             <span className="text-ink">{formatPercent(beatsAverage(now))}</span> of the time
           </span>
           <Sparkline values={series} width={110} height={26} stroke={selected ? "#BC7767" : "#AF9D8F"} />
@@ -198,7 +198,7 @@ export function Roles() {
         label="Role lens"
         title={
           <>
-            One résumé, <em className="text-clay">different markets.</em>
+            One resume, <em className="text-clay">different markets.</em>
           </>
         }
       >

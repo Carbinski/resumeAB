@@ -1,8 +1,8 @@
 # Ladder (web)
 
-Frontend for the résumé ELO tool in the parent repo. One editorial page covering:
+Frontend for the resume ELO tool in the parent repo. One editorial page covering:
 
-1. Upload a résumé (drag anywhere, or browse) and see its overall ELO.
+1. Upload a resume (drag anywhere, or browse) and see its overall ELO.
 2. ELO over time, scrubbable, with a per-quality breakdown.
 3. Role lens: Overall, AI & ML, Cloud Ops and Full-stack ratings.
 4. A/B lab: compare two versions on a balance scale, with a verdict, six quality duels and a left/right position check.

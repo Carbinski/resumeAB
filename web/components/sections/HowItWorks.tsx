@@ -133,7 +133,7 @@ const STEPS = [
   {
     n: "02",
     title: "Get rated",
-    body: "Your résumé is matched against others, head to head, and fit to an ELO scale. 1000 is average; 400 points is 10-to-1 odds.",
+    body: "Your resume is matched against others, head to head, and fit to an ELO scale. 1000 is average; 400 points is 10-to-1 odds.",
     art: <Rungs />,
   },
   {

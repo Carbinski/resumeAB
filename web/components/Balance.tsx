@@ -86,7 +86,7 @@ function Pan({
   );
 }
 
-/** A scale that tips toward the stronger résumé. Fixed height in every state. */
+/** A scale that tips toward the stronger resume. Fixed height in every state. */
 export function Balance({
   a,
   b,
