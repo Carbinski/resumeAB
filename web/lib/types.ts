@@ -1,7 +1,7 @@
 import type { CategoryId } from "./categories";
 import type { RoleId } from "./roles";
 
-/** Everything the rating engine says about one résumé version. */
+/** Everything the rating engine says about one resume version. */
 export interface RatingSnapshot {
   /** Elo per role. `overall` is the headline rating. */
   ratings: Record<RoleId, number>;
@@ -26,7 +26,7 @@ export interface OrderResult {
   choice: "left" | "right";
   probabilities: { left: number; right: number };
   confidence: number;
-  /** Probability the left résumé is stronger. */
+  /** Probability the left resume is stronger. */
   noul: number;
   model: string;
 }

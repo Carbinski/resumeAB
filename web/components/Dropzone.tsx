@@ -67,7 +67,7 @@ export function Dropzone({ dragging }: { dragging: boolean }) {
               </span>
               <div>
                 <p className="text-[1.02rem] text-ink">
-                  {dragging ? "Release to rate this résumé" : "Drop a new version anywhere on the page"}
+                  {dragging ? "Release to rate this resume" : "Drop a new version anywhere on the page"}
                 </p>
                 {upload.phase === "error" ? (
                   <p role="alert" className="font-mono text-[0.72rem] text-clay">

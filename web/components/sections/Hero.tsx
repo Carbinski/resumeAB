@@ -134,7 +134,7 @@ function ScoreCard({ dragging }: { dragging: boolean }) {
         <Sparkline values={history.map((v) => v.ratings.overall)} width={150} height={34} />
       </div>
       <p className="mt-2 hidden text-[0.74rem] leading-snug text-olive sm:block">
-        Beats the average résumé {formatPercent(beatsAverage(overall))} of the time.
+        Beats the average resume {formatPercent(beatsAverage(overall))} of the time.
       </p>
     </motion.div>
   );
@@ -254,7 +254,7 @@ export function Hero() {
         </motion.p>
 
         <h1 className="font-display mx-auto mt-7 max-w-[15ch] text-[clamp(3.2rem,10.5vw,8.6rem)] leading-[0.9] text-ink">
-          {["Know", "where", "your", "résumé"].map((w, i) => (
+          {["Know", "where", "your", "resume"].map((w, i) => (
             <Word key={w} i={i}>{w}</Word>
           ))}
           <Word i={4}><em className="text-clay">really</em></Word>
@@ -267,7 +267,7 @@ export function Hero() {
           transition={{ duration: 0.9, ease: EASE, delay: 0.7 }}
           className="mx-auto mt-7 max-w-[34rem] text-[1.05rem] leading-relaxed text-olive"
         >
-          {BRAND.name} rates your résumé the way a hiring panel would: against
+          {BRAND.name} rates your resume the way a hiring panel would: against
           others, one matchup at a time. Watch your ELO move with every edit,
           then test the next change before you send it.
         </motion.p>
@@ -280,7 +280,7 @@ export function Hero() {
         >
           <Magnetic>
             <button type="button" onClick={pickFile} className={buttonClass("ink", "h-12 px-7")}>
-              Upload résumé
+              Upload resume
             </button>
           </Magnetic>
           <a href="#how" className={buttonClass("glass", "h-12 px-7")}>

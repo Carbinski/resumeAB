@@ -88,5 +88,5 @@ export const OVERALL = {
   id: "overall",
   label: "Overall",
   definition:
-    "The headline ELO: how often this résumé beats others, judged head to head.",
+    "The headline ELO: how often this resume beats others, judged head to head.",
 } as const;

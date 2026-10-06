@@ -50,7 +50,7 @@ export interface UploadOptions {
   note?: string;
 }
 
-/** Parses and rates one résumé file. */
+/** Parses and rates one resume file. */
 export async function uploadResume(
   file: File,
   { baseline, label, note }: UploadOptions,
@@ -112,7 +112,7 @@ export async function compareVersions(
   const eloB = b.ratings[role];
   const pA = winProbability(eloA, eloB);
   const rand = seeded(`${a.id}:${b.id}:${role}`);
-  // A positive bias favours whichever résumé is shown on the left.
+  // A positive bias favours whichever resume is shown on the left.
   const bias = (rand() - 0.5) * 0.14;
 
   const categories: CategoryDuel[] = CATEGORIES.map(({ id }) => {
