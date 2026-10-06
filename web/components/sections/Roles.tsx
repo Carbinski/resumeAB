@@ -2,6 +2,7 @@
 
 import { motion, useInView } from "motion/react";
 import { useId, useRef, useState } from "react";
+import { compareVersions } from "@/lib/api";
 import { ELO_CENTER, beatsAverage, formatPercent } from "@/lib/elo";
 import { cn } from "@/lib/cn";
 import { ROLES, type RoleId } from "@/lib/roles";
@@ -31,13 +32,16 @@ function Rung({
   highlightId: string;
   index: number;
 }) {
-  const { history } = useLadder();
+  const { history, rateForRole, roleRun } = useLadder();
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "0px 0px -12% 0px" });
   const role = ROLES.find((r) => r.id === roleId)!;
-  const series = history.map((v) => v.ratings[roleId]);
-  const now = series[series.length - 1];
-  const start = series[0];
+  const series = history.flatMap((v) => {
+    const score = v.ratings[roleId];
+    return score == null ? [] : [score];
+  });
+  const now = series.length > 0 ? series[series.length - 1] : null;
+  const start = series.length > 0 ? series[0] : null;
 
   return (
     <div ref={ref} className="relative">
@@ -80,14 +84,20 @@ function Rung({
             </p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5">
-            <Odometer
-              value={now}
-              className="font-display text-[clamp(2.4rem,5vw,3.4rem)] leading-none text-ink"
-            />
-            <DeltaChip delta={now - start} suffix="all time" />
+            {now == null ? (
+              <span className="font-display text-[clamp(2.4rem,5vw,3.4rem)] leading-none text-ink">—</span>
+            ) : (
+              <Odometer
+                value={now}
+                className="font-display text-[clamp(2.4rem,5vw,3.4rem)] leading-none text-ink"
+              />
+            )}
+            {now != null && start != null ? <DeltaChip delta={now - start} suffix="all time" /> : null}
           </div>
         </div>
 
+        {now != null && start != null ? (
+        <>
         <div className="mt-5 pl-8">
           <div className="relative h-[6px] rounded-full bg-bark/10">
             <motion.div
@@ -125,17 +135,55 @@ function Rung({
             Beats the average resume{" "}
             <span className="text-ink">{formatPercent(beatsAverage(now))}</span> of the time
           </span>
-          <Sparkline values={series} width={110} height={26} stroke={selected ? "#BC7767" : "#AF9D8F"} />
+          {series.length > 0 ? (
+            <Sparkline values={series} width={110} height={26} stroke={selected ? "#BC7767" : "#AF9D8F"} />
+          ) : null}
         </div>
+        </>
+        ) : null}
       </button>
+      {now == null && roleId !== "overall" && history.length > 0 ? (
+        <div className="relative px-2 pb-4 pl-10">
+          <Button
+            type="button"
+            disabled={roleRun != null}
+            onClick={() => void rateForRole(roleId)}
+          >
+            {roleRun === roleId ? "Rating…" : "Rate your latest resume"}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function AddRole() {
+  const { history, current } = useLadder();
   const [text, setText] = useState("");
-  const [saved, setSaved] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const fieldId = useId();
+  const previous = history.length > 1 ? history[history.length - 2] : undefined;
+
+  const run = async () => {
+    if (!current || !previous) {
+      setMessage("Upload two versions to compare them against this description.");
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await compareVersions(previous, current, "overall", text.trim());
+      const percent = Math.round(result.pB * 100);
+      setMessage(
+        `Your latest resume wins ${percent}% of the time against ${previous.label} for this description.`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not rate this description.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="rounded-[32px] border border-dashed border-bark/25 bg-white/35 p-5 sm:p-7">
@@ -146,7 +194,7 @@ function AddRole() {
         Aiming somewhere <em className="text-clay">specific?</em>
       </h3>
       <p className="mt-3 text-[0.9rem] leading-relaxed text-olive">
-        Paste a job description and {`we'll`} rate your latest version against it.
+        Paste a job description and we compare your latest version with the one before it.
       </p>
       <label htmlFor={fieldId} className="sr-only">
         Job description
@@ -156,7 +204,7 @@ function AddRole() {
         value={text}
         onChange={(e) => {
           setText(e.target.value);
-          setSaved(false);
+          setMessage(null);
         }}
         rows={5}
         placeholder="Senior ML Engineer, Search Relevance. You will own ranking models end to end…"
@@ -165,24 +213,23 @@ function AddRole() {
       <div className="mt-3 flex items-center justify-between gap-3">
         <Button
           type="button"
-          disabled={text.trim().length < 20}
-          onClick={() => setSaved(true)}
+          disabled={text.trim().length < 20 || busy}
+          onClick={() => void run()}
         >
-          Rate for this role
+          {busy ? "Rating…" : "Rate for this role"}
         </Button>
         <span className="font-mono text-[0.7rem] text-taupe">{text.trim().length} chars</span>
       </div>
-      {saved && (
+      {message ? (
         <motion.p
           role="status"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           className="mt-4 rounded-2xl bg-peach/70 p-3 text-[0.82rem] leading-snug text-bark"
         >
-          Preview only: custom roles will appear on the ladder once the rating
-          engine is connected.
+          {message}
         </motion.p>
-      )}
+      ) : null}
     </div>
   );
 }

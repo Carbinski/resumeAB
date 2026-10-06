@@ -28,11 +28,29 @@ export function Anatomy({
 
   const rows = CATEGORIES.map((def) => {
     const value = categoryElo(version, def.id, role);
-    const prior = before ? categoryElo(before, def.id, role) : undefined;
-    return { def, value, delta: prior === undefined ? 0 : value - prior };
+    const prior = before ? categoryElo(before, def.id, role) : null;
+    return {
+      def,
+      value,
+      delta: value == null || prior == null ? null : value - prior,
+    };
   });
-  const strongest = rows.reduce((a, b) => (b.value > a.value ? b : a));
-  const weakest = rows.reduce((a, b) => (b.value < a.value ? b : a));
+  const scored = rows.filter((row): row is typeof row & { value: number } => row.value != null);
+  if (scored.length === 0) {
+    return (
+      <div>
+        <h3 className="text-[0.72rem] font-medium uppercase tracking-[0.18em] text-olive">
+          Anatomy of {version.label}
+        </h3>
+        <p className="mt-4 text-[0.9rem] leading-relaxed text-olive">
+          Quality scores show up with your second version. That comparison asks the six
+          questions alongside the head-to-head.
+        </p>
+      </div>
+    );
+  }
+  const strongest = scored.reduce((a, b) => (b.value > a.value ? b : a));
+  const weakest = scored.reduce((a, b) => (b.value < a.value ? b : a));
 
   return (
     <div ref={ref}>
@@ -44,7 +62,7 @@ export function Anatomy({
       </div>
 
       <ul className="mt-5 space-y-4">
-        {rows.map(({ def, value, delta }, i) => (
+        {scored.map(({ def, value, delta }, i) => (
           <li key={def.id}>
             <div className="flex items-center justify-between gap-3 text-[0.88rem]">
               <span className="flex items-center gap-2 text-ink">
@@ -57,12 +75,12 @@ export function Anatomy({
                 {def.label}
               </span>
               <span className="flex items-baseline gap-2 font-mono text-[0.78rem]">
-                {before ? (
+                {delta != null ? (
                   <span className={delta >= 0 ? "text-olive" : "text-clay"}>
                     {formatDelta(delta)}
                   </span>
                 ) : null}
-                <span className="text-ink">{value}</span>
+                <span className="text-ink">{value ?? "—"}</span>
               </span>
             </div>
             <div className="mt-2 h-[5px] overflow-hidden rounded-full bg-bark/10">
@@ -72,7 +90,7 @@ export function Anatomy({
                 initial={{ width: 0 }}
                 animate={{
                   width: inView
-                    ? `${Math.max(4, ((value - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100)}%`
+                    ? `${Math.max(4, (((value ?? SCALE_MIN) - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100)}%`
                     : 0,
                 }}
                 transition={{ duration: 1.1, ease: EASE, delay: inView ? i * 0.07 : 0 }}

@@ -81,7 +81,7 @@ function OrbitChip({
   );
 }
 
-function CategoryChip({ def, value }: { def: CategoryDef; value: number }) {
+function CategoryChip({ def, value }: { def: CategoryDef; value: number | null }) {
   return (
     <div className="glass flex items-center gap-2 whitespace-nowrap rounded-full py-1.5 pl-1.5 pr-3 text-[0.78rem] sm:gap-2.5 sm:pr-4 sm:text-[0.85rem]">
       <span
@@ -91,23 +91,45 @@ function CategoryChip({ def, value }: { def: CategoryDef; value: number }) {
         <CategoryGlyph id={def.id} className="h-3.5 w-3.5" />
       </span>
       <span className="text-ink">{def.short}</span>
-      <span className="font-mono text-[0.72rem] text-olive">{Math.round(value)}</span>
+      <span className="font-mono text-[0.72rem] text-olive">
+        {value == null ? "—" : Math.round(value)}
+      </span>
     </div>
   );
 }
 
-function RoleChip({ role, value }: { role: RoleTrack; value: number }) {
+function RoleChip({ role, value }: { role: RoleTrack; value: number | null }) {
   return (
     <div className="flex items-center gap-2.5 whitespace-nowrap rounded-full border border-bark/15 bg-cream/60 py-1.5 pl-3 pr-4 text-[0.85rem] backdrop-blur-sm">
       <span className="h-1.5 w-1.5 rounded-full bg-clay" />
       <span className="text-ink">{role.label}</span>
-      <span className="font-mono text-[0.72rem] text-olive">{Math.round(value)}</span>
+      <span className="font-mono text-[0.72rem] text-olive">
+        {value == null ? "—" : Math.round(value)}
+      </span>
     </div>
   );
 }
 
 function ScoreCard({ dragging }: { dragging: boolean }) {
   const { history, current } = useLadder();
+  if (!current) {
+    return (
+      <motion.div
+        className="glass relative z-20 w-[min(62vw,248px)] rounded-[30px] p-4 text-center sm:p-5"
+        initial={{ opacity: 0, y: 24, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: dragging ? 1.05 : 1 }}
+        transition={{ duration: 1, ease: EASE, delay: 0.55 }}
+      >
+        <p className="text-[0.66rem] font-medium uppercase tracking-[0.2em] text-olive">
+          Overall ELO
+        </p>
+        <p className="font-display mt-1 text-[clamp(3.6rem,10vw,5.4rem)] leading-none text-ink">—</p>
+        <p className="mt-2 text-[0.74rem] leading-snug text-olive">
+          Create an account and upload a resume.
+        </p>
+      </motion.div>
+    );
+  }
   const prev = previous(history);
   const overall = current.ratings.overall;
   const delta = prev ? overall - prev.ratings.overall : 0;
@@ -199,7 +221,7 @@ function OrbitStage({ dragging }: { dragging: boolean }) {
           mx={mx}
           my={my}
         >
-          <CategoryChip def={def} value={categoryElo(current, def.id, "overall")} />
+          <CategoryChip def={def} value={current ? categoryElo(current, def.id, "overall") : null} />
         </OrbitChip>
       ))}
       {SPECIFIC_ROLES.map((role, i) => (
@@ -212,7 +234,7 @@ function OrbitStage({ dragging }: { dragging: boolean }) {
           my={my}
           className="hidden md:block"
         >
-          <RoleChip role={role} value={current.ratings[role.id]} />
+          <RoleChip role={role} value={current ? current.ratings[role.id] : null} />
         </OrbitChip>
       ))}
     </div>

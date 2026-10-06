@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
+import { logout } from "@/lib/api";
 import { BRAND } from "@/lib/brand";
 import { Magnetic, buttonClass } from "./ui/Button";
 import { useLadder } from "./LadderProvider";
@@ -22,7 +23,11 @@ export function Wordmark({ className }: { className?: string }) {
 }
 
 export function Nav() {
-  const { pickFile } = useLadder();
+  const { pickFile, user, signOut } = useLadder();
+  const leave = async () => {
+    await logout();
+    signOut();
+  };
 
   return (
     <motion.nav
@@ -48,15 +53,33 @@ export function Nav() {
             </li>
           ))}
         </ul>
-        <Magnetic strength={0.18}>
-          <button
-            type="button"
-            onClick={pickFile}
-            className={buttonClass("ink", "h-10 px-5 text-[0.85rem]")}
-          >
-            Upload resume
-          </button>
-        </Magnetic>
+        <div className="flex items-center gap-1">
+          {user ? (
+            <button
+              type="button"
+              onClick={() => void leave()}
+              className="hidden rounded-full px-3 py-2 text-[0.82rem] text-olive hover:text-ink sm:inline"
+            >
+              Log out
+            </button>
+          ) : (
+            <a
+              href="#account"
+              className="hidden rounded-full px-3 py-2 text-[0.82rem] text-olive hover:text-ink sm:inline"
+            >
+              Sign in
+            </a>
+          )}
+          <Magnetic strength={0.18}>
+            <button
+              type="button"
+              onClick={pickFile}
+              className={buttonClass("ink", "h-10 px-5 text-[0.85rem]")}
+            >
+              Upload resume
+            </button>
+          </Magnetic>
+        </div>
       </div>
     </motion.nav>
   );
