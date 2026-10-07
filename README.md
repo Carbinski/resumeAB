@@ -29,3 +29,5 @@ Every upload appends the extracted text and the redacted text to `data/logs/resu
 ## Caching
 
 Every comparison is appended to `matches.jsonl`, which doubles as a cache: a pair with the same resume and job description text (in either order) is reused instead of calling the API again. Pass `--no-cache` to force fresh calls.
+
+A proposal for deploy, the signed-in page, and the next tracks is in [docs/next-steps.md](docs/next-steps.md).
