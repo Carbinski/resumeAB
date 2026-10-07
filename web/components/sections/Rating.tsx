@@ -23,7 +23,7 @@ const RANGES = [
 ] as const;
 
 export function Rating() {
-  const { history, role, setRole, rateForRole, roleRun } = useLadder();
+  const { history, role, setRole, rateForRole, roleRun, demo, exitDemo } = useLadder();
   const [range, setRange] = useState<Range>("all");
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -78,6 +78,21 @@ export function Rating() {
         Every version you upload is rated against the pool. Slide across the
         line to see what changed, and what it did to your score.
       </SectionHeader>
+
+      {demo ? (
+        <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <p role="status" className="text-[0.85rem] text-olive">
+            Sample history
+          </p>
+          <button
+            type="button"
+            onClick={exitDemo}
+            className="text-[0.85rem] text-ink underline decoration-bark/25 underline-offset-4"
+          >
+            Leave sample history
+          </button>
+        </div>
+      ) : null}
 
       <div className="mt-12 grid gap-5 md:mt-16 lg:grid-cols-12">
         <Reveal className="glass rounded-[32px] p-5 sm:p-8 lg:col-span-8">
@@ -157,18 +172,22 @@ export function Rating() {
             ) : (
               <div className="rounded-3xl border border-dashed border-bark/20 px-5 py-8">
                 <p className="text-[0.95rem] text-olive">
-                  {ROLE_BY_ID[role].label} has not been rated yet. It uses the same eight-matchup
-                  budget, only when you ask for it.
+                  {ROLE_BY_ID[role].label} has not been rated yet.
+                  {demo
+                    ? " Sample history leaves it that way."
+                    : " It uses the same eight-matchup budget, only when you ask for it."}
                 </p>
-                <Button
-                  className="mt-4"
-                  disabled={roleRun != null || role === "overall"}
-                  onClick={() => {
-                    if (role !== "overall") void rateForRole(role);
-                  }}
-                >
-                  {roleRun === role ? "Rating…" : `Rate latest for ${ROLE_BY_ID[role].label}`}
-                </Button>
+                {demo ? null : (
+                  <Button
+                    className="mt-4"
+                    disabled={roleRun != null || role === "overall"}
+                    onClick={() => {
+                      if (role !== "overall") void rateForRole(role);
+                    }}
+                  >
+                    {roleRun === role ? "Rating…" : `Rate latest for ${ROLE_BY_ID[role].label}`}
+                  </Button>
+                )}
               </div>
             )}
           </div>

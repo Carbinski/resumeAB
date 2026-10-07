@@ -12,6 +12,7 @@ import {
 } from "react";
 import { getHistory, publishVersion, rateRole, uploadResume } from "@/lib/api";
 import { ACCEPTED_FORMATS } from "@/lib/brand";
+import { SAMPLE_HISTORY } from "@/lib/sampleHistory";
 import type { RoleId } from "@/lib/roles";
 import type { Account, ResumeVersion } from "@/lib/types";
 
@@ -41,6 +42,10 @@ interface LadderState {
   rateForRole: (role: Exclude<RoleId, "overall">) => Promise<void>;
   roleRun: RoleId | null;
   signOut: () => void;
+  /** Sample history is on screen. Live account data is kept and restored on exit. */
+  demo: boolean;
+  enterDemo: () => void;
+  exitDemo: () => void;
 }
 
 const Ctx = createContext<LadderState | null>(null);
@@ -58,40 +63,64 @@ function needsPoll(version: ResumeVersion): boolean {
   );
 }
 
+function setDemoQuery(on: boolean) {
+  const url = new URL(window.location.href);
+  if (on) url.searchParams.set("demo", "1");
+  else url.searchParams.delete("demo");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 export function LadderProvider({
   initialHistory,
   initialUser,
   offline,
+  initialDemo = false,
   children,
 }: {
   initialHistory: ResumeVersion[];
   initialUser: Account | null;
   offline: boolean;
+  initialDemo?: boolean;
   children: ReactNode;
 }) {
-  const [history, setHistory] = useState(initialHistory);
+  const [liveHistory, setLiveHistory] = useState(initialHistory);
+  const [demo, setDemo] = useState(initialDemo);
   const [user, setUser] = useState(initialUser);
   const [role, setRole] = useState<RoleId>("overall");
   const [upload, setUpload] = useState<UploadStatus>({ phase: "idle" });
   const [roleRun, setRoleRun] = useState<RoleId | null>(null);
 
+  const history = demo ? SAMPLE_HISTORY : liveHistory;
   const current = history.length > 0 ? history[history.length - 1] : null;
 
+  const enterDemo = useCallback(() => {
+    setDemo(true);
+    setUpload({ phase: "idle" });
+    setDemoQuery(true);
+  }, []);
+
+  const exitDemo = useCallback(() => {
+    setDemo(false);
+    setUpload({ phase: "idle" });
+    setDemoQuery(false);
+  }, []);
+
   const refresh = useCallback(async () => {
+    if (demo) return;
     const next = await getHistory();
-    setHistory(next);
+    setLiveHistory(next);
     setUpload((state) => {
       if (state.phase !== "done" && state.phase !== "processing") return state;
       return state;
     });
-  }, []);
+  }, [demo]);
 
   useEffect(() => {
-    if (!history.some(needsPoll)) return;
+    if (demo || !liveHistory.some(needsPoll)) return;
     const timer = setInterval(() => {
       void getHistory()
         .then((next) => {
-          setHistory(next);
+          setLiveHistory(next);
           setUpload((state) => {
             if (state.phase !== "done") return state;
             const updated = next.find((version) => version.id === state.version.id);
@@ -107,7 +136,7 @@ export function LadderProvider({
         .catch(() => undefined);
     }, 2000);
     return () => clearInterval(timer);
-  }, [history]);
+  }, [demo, liveHistory]);
 
   const requireAccount = useCallback(() => {
     if (user) return true;
@@ -118,6 +147,10 @@ export function LadderProvider({
 
   const rateFile = useCallback(
     async (file: File) => {
+      if (demo) {
+        setUpload({ phase: "error", message: "Leave sample history before uploading." });
+        return null;
+      }
       if (!requireAccount()) return null;
       setUpload({ phase: "processing", fileName: file.name });
       const baseline = current;
@@ -126,7 +159,7 @@ export function LadderProvider({
           baseline: baseline ?? undefined,
           label: `v${history.length + 1}`,
         });
-        setHistory((items) =>
+        setLiveHistory((items) =>
           items.some((item) => item.id === version.id) ? items : [...items, version],
         );
         setUpload({
@@ -143,13 +176,17 @@ export function LadderProvider({
         return null;
       }
     },
-    [current, history.length, requireAccount],
+    [current, demo, history.length, requireAccount],
   );
 
   const addVersion = useCallback(async (version: ResumeVersion) => {
+    if (demo) {
+      setUpload({ phase: "error", message: "Leave sample history before saving a version." });
+      return null;
+    }
     try {
       const published = await publishVersion(version.id);
-      setHistory((items) =>
+      setLiveHistory((items) =>
         items.some((item) => item.id === published.id)
           ? items.map((item) => (item.id === published.id ? published : item))
           : [...items, published],
@@ -162,16 +199,20 @@ export function LadderProvider({
       });
       return null;
     }
-  }, []);
+  }, [demo]);
 
   const rateForRole = useCallback(
     async (nextRole: Exclude<RoleId, "overall">) => {
+      if (demo) {
+        setUpload({ phase: "error", message: "Leave sample history before rating a role." });
+        return;
+      }
       const latest = current;
       if (!latest) return;
       setRoleRun(nextRole);
       try {
         const version = await rateRole(latest.id, nextRole);
-        setHistory((items) => items.map((item) => (item.id === version.id ? version : item)));
+        setLiveHistory((items) => items.map((item) => (item.id === version.id ? version : item)));
       } catch (error) {
         setUpload({
           phase: "error",
@@ -181,21 +222,25 @@ export function LadderProvider({
         setRoleRun(null);
       }
     },
-    [current],
+    [current, demo],
   );
 
   const resetUpload = useCallback(() => setUpload({ phase: "idle" }), []);
   const signOut = useCallback(() => {
     setUser(null);
-    setHistory([]);
+    setLiveHistory([]);
     setUpload({ phase: "idle" });
   }, []);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const pickFile = useCallback(() => {
+    if (demo) {
+      setUpload({ phase: "error", message: "Leave sample history before uploading." });
+      return;
+    }
     if (!requireAccount()) return;
     inputRef.current?.click();
-  }, [requireAccount]);
+  }, [demo, requireAccount]);
 
   const value = useMemo(
     () => ({
@@ -215,6 +260,9 @@ export function LadderProvider({
       rateForRole,
       roleRun,
       signOut,
+      demo,
+      enterDemo,
+      exitDemo,
     }),
     [
       history,
@@ -231,6 +279,9 @@ export function LadderProvider({
       rateForRole,
       roleRun,
       signOut,
+      demo,
+      enterDemo,
+      exitDemo,
     ],
   );
 

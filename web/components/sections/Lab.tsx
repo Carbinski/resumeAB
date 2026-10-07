@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useLenis } from "lenis/react";
 import { useRef, useState } from "react";
 import { compareVersions, isSupportedResume, uploadResume } from "@/lib/api";
+import { compareSampleVersions } from "@/lib/sampleHistory";
 import { ACCEPTED_FORMATS } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { ROLES } from "@/lib/roles";
@@ -79,6 +80,7 @@ function DraftDrop({
   onDraft: (v: ResumeVersion) => void;
   onBusy: (busy: boolean) => void;
 }) {
+  const { demo } = useLadder();
   const inputRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -86,6 +88,10 @@ function DraftDrop({
 
   const handle = async (file: File | undefined) => {
     if (!file || busy) return;
+    if (demo) {
+      setError("Leave sample history before uploading.");
+      return;
+    }
     if (!isSupportedResume(file.name)) {
       setError(`Use ${ACCEPTED_FORMATS.join(", ")}.`);
       return;
@@ -183,7 +189,7 @@ function Slot({ active, children }: { active: boolean; children: React.ReactNode
 }
 
 export function Lab() {
-  const { history, current, role, setRole, addVersion } = useLadder();
+  const { history, current, role, setRole, addVersion, demo } = useLadder();
   const lenis = useLenis();
   const stageRef = useRef<HTMLDivElement>(null);
 
@@ -238,10 +244,15 @@ export function Lab() {
 
   const run = async () => {
     if (!b || !ready) return;
-    setPhase("running");
     setSavedAs(null);
     setError(null);
     frameStage();
+    if (demo) {
+      setResult(compareSampleVersions(a, b, role));
+      setPhase("result");
+      return;
+    }
+    setPhase("running");
     try {
       const outcome = await compareVersions(a, b, role);
       setResult(outcome);
@@ -268,10 +279,14 @@ export function Lab() {
   const hint = drafting
     ? "Rating your edit…"
     : !b
-      ? "Choose a baseline, then add the version you changed."
+      ? demo
+        ? "Sample history. Choose two versions. The comparison stays on this page."
+        : "Choose a baseline, then add the version you changed."
       : b.id === a.id
         ? "Pick two different versions to compare."
-        : "Ready. Weigh A against B.";
+        : demo
+          ? "Ready. This uses the saved scores, not a live rating."
+          : "Ready. Weigh A against B.";
 
   return (
     <section id="lab" className="mx-auto max-w-[1180px] px-5 pb-24 sm:px-8 md:pb-32">
@@ -374,6 +389,11 @@ export function Lab() {
                 {phase === "running" ? "Weighing…" : phase === "result" ? "Run it again" : "Run comparison"}
               </Button>
             </Magnetic>
+            {demo ? (
+              <p className="max-w-md text-center text-[0.85rem] leading-snug text-olive">
+                Sample history. Scored from the Elo gap on this page, not a live rating.
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center justify-center gap-3">
               <span className="text-[0.85rem] text-olive">Judge for</span>
               <Segmented

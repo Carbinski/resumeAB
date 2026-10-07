@@ -242,7 +242,7 @@ function OrbitStage({ dragging }: { dragging: boolean }) {
 }
 
 export function Hero() {
-  const { rateFile, pickFile } = useLadder();
+  const { rateFile, pickFile, demo, enterDemo, exitDemo } = useLadder();
   const dragging = useWindowFileDrop((file) => void rateFile(file));
 
   return (
@@ -272,7 +272,7 @@ export function Hero() {
             <span className="absolute inset-0 rounded-full bg-clay" style={{ animation: "pulse-ring 2s ease-out infinite" }} />
             <span className="relative h-1.5 w-1.5 rounded-full bg-clay" />
           </span>
-          Rated head to head, never by keyword
+          {demo ? "Sample history" : "Rated head to head, never by keyword"}
         </motion.p>
 
         <h1 className="font-display mx-auto mt-7 max-w-[15ch] text-[clamp(3.2rem,10.5vw,8.6rem)] leading-[0.9] text-ink">
@@ -305,6 +305,15 @@ export function Hero() {
               Upload resume
             </button>
           </Magnetic>
+          {demo ? (
+            <button type="button" onClick={exitDemo} className={buttonClass("glass", "h-12 px-7")}>
+              Leave sample history
+            </button>
+          ) : (
+            <button type="button" onClick={enterDemo} className={buttonClass("glass", "h-12 px-7")}>
+              View sample history
+            </button>
+          )}
           <a href="#how" className={buttonClass("glass", "h-12 px-7")}>
             How it works
           </a>
