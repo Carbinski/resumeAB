@@ -14,7 +14,7 @@ import { deleteVersion, getHistory, isSupportedResume, publishVersion, rateRole,
 import { ACCEPTED_FORMATS } from "@/lib/brand";
 import { labelFromFileName } from "@/lib/labels";
 import { SAMPLE_HISTORY } from "@/lib/sampleHistory";
-import type { RoleId } from "@/lib/roles";
+import { visibleRoleIds, type RoleId } from "@/lib/roles";
 import type { Account, ResumeVersion } from "@/lib/types";
 
 export type UploadStatus =
@@ -49,6 +49,8 @@ interface LadderState {
   rateForRole: (role: Exclude<RoleId, "overall">) => Promise<void>;
   roleRun: RoleId | null;
   signOut: () => void;
+  /** A published or drafted résumé exists outside sample history. */
+  hasLiveVersion: boolean;
   /** Sample history is on screen. Live account data is kept and restored on exit. */
   demo: boolean;
   enterDemo: () => void;
@@ -108,9 +110,9 @@ export function LadderProvider({
   children: ReactNode;
 }) {
   const [liveHistory, setLiveHistory] = useState(initialHistory);
-  const [demo, setDemo] = useState(initialDemo);
+  const [demoRequested, setDemoRequested] = useState(initialDemo && initialHistory.length === 0);
   const [user, setUser] = useState(initialUser);
-  const [role, setRole] = useState<RoleId>("overall");
+  const [roleChoice, setRole] = useState<RoleId>("overall");
   const [upload, setUpload] = useState<UploadStatus>({ phase: "idle" });
   const [roleRun, setRoleRun] = useState<RoleId | null>(null);
   const pendingFile = useRef<File | null>(null);
@@ -123,18 +125,28 @@ export function LadderProvider({
     return next.filter((version) => !hidden.has(version.id));
   }, []);
 
+  const hasLiveVersion = liveHistory.length > 0;
+  const demo = demoRequested && !hasLiveVersion;
   const history = demo ? SAMPLE_HISTORY : liveHistory;
   const current = history.length > 0 ? history[history.length - 1] : null;
+  const role = visibleRoleIds(demo, user?.focus).includes(roleChoice) ? roleChoice : "overall";
+
+  useEffect(() => {
+    if (!hasLiveVersion) return;
+    if (new URLSearchParams(window.location.search).get("demo") !== "1") return;
+    setDemoQuery(false);
+  }, [hasLiveVersion]);
 
   const enterDemo = useCallback(() => {
+    if (liveHistory.length > 0) return;
     pendingFile.current = null;
-    setDemo(true);
+    setDemoRequested(true);
     setUpload({ phase: "idle" });
     setDemoQuery(true);
-  }, []);
+  }, [liveHistory.length]);
 
   const exitDemo = useCallback(() => {
-    setDemo(false);
+    setDemoRequested(false);
     setUpload({ phase: "idle" });
     setDemoQuery(false);
   }, []);
@@ -327,6 +339,7 @@ export function LadderProvider({
       rateForRole,
       roleRun,
       signOut,
+      hasLiveVersion,
       demo,
       enterDemo,
       exitDemo,
@@ -349,6 +362,7 @@ export function LadderProvider({
       rateForRole,
       roleRun,
       signOut,
+      hasLiveVersion,
       demo,
       enterDemo,
       exitDemo,

@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
     level TEXT NOT NULL,
     industry TEXT NOT NULL,
     company TEXT,
+    focus TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     deleted_at TEXT
 );
@@ -260,6 +261,7 @@ class User:
     level: str
     industry: str
     company: str | None
+    focus: str
 
 
 @dataclass
@@ -303,6 +305,7 @@ def _user(row: sqlite3.Row) -> User:
         level=row["level"],
         industry=row["industry"],
         company=row["company"],
+        focus=row["focus"] or "",
     )
 
 
@@ -350,10 +353,23 @@ class Store:
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(SCHEMA)
+        self._ensure_focus_column()
 
     def close(self) -> None:
         with self._lock:
             self._conn.close()
+
+    def _ensure_focus_column(self) -> None:
+        """Add ``users.focus`` on databases created before that column existed.
+
+        ``CREATE TABLE IF NOT EXISTS`` does not alter a table that is already
+        there. Checking the columns first makes this safe to run twice.
+        """
+        columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(users)")}
+        if "focus" in columns:
+            return
+        self._conn.execute("ALTER TABLE users ADD COLUMN focus TEXT NOT NULL DEFAULT ''")
+        self._conn.commit()
 
     def seed_anchors(self) -> None:
         with self._lock:
@@ -428,13 +444,15 @@ class Store:
         level: str,
         industry: str,
         company: str | None,
+        focus: str = "",
     ) -> User:
         with self._lock:
             user_id = uuid.uuid4().hex
             self._conn.execute(
                 """
-                INSERT INTO users (id, email, password_hash, name_on_resume, level, industry, company, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO users (
+                    id, email, password_hash, name_on_resume, level, industry, company, focus, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     user_id,
@@ -444,6 +462,7 @@ class Store:
                     level,
                     industry,
                     company,
+                    focus,
                     _now(),
                 ),
             )
@@ -481,15 +500,16 @@ class Store:
         level: str,
         industry: str,
         company: str | None,
+        focus: str,
     ) -> User:
         with self._lock:
             self._conn.execute(
                 """
                 UPDATE users
-                SET name_on_resume = ?, level = ?, industry = ?, company = ?
+                SET name_on_resume = ?, level = ?, industry = ?, company = ?, focus = ?
                 WHERE id = ? AND deleted_at IS NULL
                 """,
-                (name_on_resume, level, industry, company, user_id),
+                (name_on_resume, level, industry, company, focus, user_id),
             )
             self._conn.commit()
             return self.get_user(user_id)  # type: ignore[return-value]

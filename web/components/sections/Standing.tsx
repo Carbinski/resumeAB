@@ -1,6 +1,6 @@
 "use client";
 
-import { levelLabel } from "@/lib/cohort";
+import { industryLabel, levelLabel } from "@/lib/cohort";
 import type { ResumeVersion } from "@/lib/types";
 
 const RELATION = {
@@ -27,9 +27,16 @@ function ordinal(n: number): string {
 export function Standing({ version }: { version: ResumeVersion }) {
   const { standing } = version;
   const level = levelLabel(version.level);
+  const industry = industryLabel(version.industry);
   const peak = Math.max(1, ...standing.histogram.map((band) => band.count));
   const percentile =
     standing.percentile == null ? null : Math.round(standing.percentile * 100);
+  const lead =
+    standing.status === "placing"
+      ? `${industry}. Placing this resume · ${standing.matchesPlayed} of ${standing.matchBudget} matchups.`
+      : percentile == null
+        ? `${industry}. You're the first placed resume in this pool.`
+        : `${industry}. About the ${ordinal(percentile)} percentile of ${level.toLowerCase()} resumes.`;
 
   return (
     <div className="mt-5 rounded-[32px] border border-bark/10 bg-white/40 p-5 sm:p-8">
@@ -41,11 +48,7 @@ export function Standing({ version }: { version: ResumeVersion }) {
           <h3 className="font-display mt-2 text-[1.8rem] leading-none text-ink">{standing.band}</h3>
         </div>
         <p className="max-w-sm text-[0.88rem] leading-snug text-olive">
-          {standing.status === "placing"
-            ? `Placing this resume · ${standing.matchesPlayed} of ${standing.matchBudget} matchups.`
-            : percentile == null
-              ? "You're the first placed resume in this pool."
-              : `About the ${ordinal(percentile)} percentile of ${level.toLowerCase()} resumes.`}
+          {lead}
           {standing.status === "provisional"
             ? " Provisional — a few matchups are still running."
             : ""}
@@ -77,6 +80,10 @@ export function Standing({ version }: { version: ResumeVersion }) {
           Few people in your industry yet. Showing other {version.level === "intern" ? "interns" : "new grads"}.
         </p>
       ) : null}
+
+      <p className="mt-5 text-[0.86rem] text-olive">
+        {version.company ? `Your card shows ${version.company}` : "Your card has no company."}
+      </p>
 
       {standing.neighbors.length > 0 ? (
         <ul className="mt-4 grid gap-3 sm:grid-cols-2">

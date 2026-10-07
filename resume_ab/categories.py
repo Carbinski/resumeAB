@@ -30,4 +30,24 @@ ROLE_DESCRIPTIONS = {
         "Full-stack product engineer, internship or new grad. "
         "Work across the interface, the API, and the data layer."
     ),
+    "embedded": (
+        "Embedded and electronics engineer, internship or new grad. "
+        "Firmware, circuits, boards, and test equipment."
+    ),
+    "mechanical": (
+        "Mechanical engineer, internship or new grad. "
+        "Mechanisms, CAD, manufacturing, and hardware test."
+    ),
+    "flight": (
+        "Aerospace engineer, internship or new grad. "
+        "Structures, flight systems, guidance, and vehicles."
+    ),
+    "devices": (
+        "Biomedical devices engineer, internship or new grad. "
+        "Instrumentation, implants, and imaging hardware."
+    ),
+    "biodata": (
+        "Biomedical data engineer, internship or new grad. "
+        "Lab or clinical data, analysis pipelines, and bioinformatics."
+    ),
 }

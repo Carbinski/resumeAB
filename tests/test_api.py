@@ -1,11 +1,13 @@
 import logging
+import sqlite3
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from resume_ab.api import create_app
-from resume_ab.cohort import MATCH_BUDGET
+from resume_ab.categories import ROLE_DESCRIPTIONS
+from resume_ab.cohort import MATCH_BUDGET, ROLE_IDS, suggested_focus
 from resume_ab.place import _elo_after, _select_category_anchor
 from resume_ab.store import Store
 from tests.fakes import ScriptedJudge
@@ -463,3 +465,189 @@ def test_overflow_keeps_the_rating_and_drops_the_oldest_file(tmp_path: Path):
     assert oldest.purged
     assert newest.redacted_text is not None
     assert newest.label == "v21"
+
+
+def _profile(industry: str, company: str, focus: str | None, level: str = "intern") -> dict:
+    body = {
+        "nameOnResume": "Ada Lovelace",
+        "level": level,
+        "industry": industry,
+        "company": company,
+    }
+    if focus is not None:
+        body["focus"] = focus
+    return body
+
+
+def test_focus_signup_profile_and_version_snapshot(tmp_path: Path):
+    client, _judge, _store = _client(tmp_path)
+    created = client.post(
+        "/auth/signup",
+        json={
+            "email": "ada@example.test",
+            "password": "correct-horse",
+            "nameOnResume": "Ada Lovelace",
+            "level": "intern",
+            "industry": "software",
+            "company": "Northwind",
+            "focus": "cs",
+        },
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["focus"] == "cs"
+
+    uploaded = client.post(
+        "/versions",
+        files={"file": ("resume.txt", RESUME.encode(), "text/plain")},
+        data={"note": "First version", "draft": "false"},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    body = uploaded.json()
+    assert body["industry"] == "software"
+    assert body["company"] == "Northwind"
+    assert body["ratings"]["embedded"] is None
+    assert body["roleStatus"]["embedded"] is None
+    assert body["ratings"]["flight"] is None
+
+    moved = client.patch("/me", json=_profile("aerospace", "Other Co", "cs"))
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["industry"] == "aerospace"
+    assert moved.json()["company"] == "Other Co"
+    assert moved.json()["focus"] == "cs"
+
+    kept = client.patch("/me", json=_profile("defense", "Other Co", None, level="newgrad"))
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["focus"] == "cs"
+    assert kept.json()["level"] == "newgrad"
+
+    cleared = client.patch("/me", json=_profile("defense", "Other Co", "", level="newgrad"))
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["focus"] == ""
+
+    rejected = client.patch("/me", json=_profile("defense", "Other Co", "flight", level="newgrad"))
+    assert rejected.status_code == 400
+    assert client.get("/me").json()["focus"] == ""
+
+    versions = client.get("/versions").json()
+    assert versions[0]["industry"] == "software"
+    assert versions[0]["company"] == "Northwind"
+    assert versions[0]["level"] == "intern"
+
+    healthcare = TestClient(client.app)
+    suggested = healthcare.post(
+        "/auth/signup",
+        json={
+            "email": "grace@example.test",
+            "password": "correct-horse",
+            "nameOnResume": "Grace Hopper",
+            "level": "intern",
+            "industry": "healthcare",
+            "company": "Clinic",
+        },
+    )
+    assert suggested.status_code == 200, suggested.text
+    assert suggested.json()["focus"] == "bme"
+
+    defense = TestClient(client.app)
+    unset = defense.post(
+        "/auth/signup",
+        json={
+            "email": "lin@example.test",
+            "password": "correct-horse",
+            "nameOnResume": "Lin Type",
+            "level": "newgrad",
+            "industry": "defense",
+            "company": "",
+            "focus": "",
+        },
+    )
+    assert unset.status_code == 200, unset.text
+    assert unset.json()["focus"] == ""
+    assert unset.json()["company"] is None
+    assert suggested_focus("software") == "cs"
+    assert suggested_focus("manufacturing") == "mee"
+    assert suggested_focus("consulting") == ""
+    assert suggested_focus("robotics") == ""
+    assert suggested_focus("finance") == ""
+
+
+def test_new_track_is_accepted_and_unknown_role_is_rejected(tmp_path: Path):
+    client, judge, _store = _client(tmp_path)
+    _signup(client, "ada@example.test", "Northwind")
+    uploaded = client.post(
+        "/versions",
+        files={"file": ("resume.txt", RESUME.encode(), "text/plain")},
+        data={"draft": "false"},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    resume_id = uploaded.json()["id"]
+    assert "embedded" in ROLE_IDS
+    assert "flight" in ROLE_IDS
+    assert "aerospace" not in ROLE_IDS
+    assert ROLE_DESCRIPTIONS["embedded"] == (
+        "Embedded and electronics engineer, internship or new grad. "
+        "Firmware, circuits, boards, and test equipment."
+    )
+    assert ROLE_DESCRIPTIONS["flight"].startswith("Aerospace engineer, internship or new grad.")
+
+    before = len(judge.calls)
+    rated = client.post(f"/versions/{resume_id}/roles/embedded")
+    assert rated.status_code == 200, rated.text
+    payload = rated.json()
+    assert payload["roleStatus"]["embedded"]["status"] == "rated"
+    assert isinstance(payload["ratings"]["embedded"], int)
+    assert len(judge.calls) > before
+
+    after = len(judge.calls)
+    unknown = client.post(f"/versions/{resume_id}/roles/nope")
+    assert unknown.status_code == 404
+    collided = client.post(f"/versions/{resume_id}/roles/aerospace")
+    assert collided.status_code == 404
+    assert len(judge.calls) == after
+
+
+def test_focus_column_migration_is_safe_to_repeat(tmp_path: Path):
+    database = tmp_path / "ladder.db"
+    connection = sqlite3.connect(database)
+    connection.execute(
+        """
+        CREATE TABLE users (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            name_on_resume TEXT NOT NULL,
+            level TEXT NOT NULL,
+            industry TEXT NOT NULL,
+            company TEXT,
+            created_at TEXT NOT NULL,
+            deleted_at TEXT
+        )
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO users (
+            id, email, password_hash, name_on_resume, level, industry, company, created_at
+        ) VALUES ('user-1', 'ada@example.test', 'hash', 'Ada Lovelace', 'intern', 'software', 'Northwind', '2026-01-01T00:00:00+00:00')
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    store = Store(database, tmp_path / "blobs")
+    store.close()
+    store = Store(database, tmp_path / "blobs")
+    existing = store.get_user("user-1")
+    assert existing is not None
+    assert existing.focus == ""
+    created = store.create_user(
+        email="grace@example.test",
+        password="correct-horse",
+        name_on_resume="Grace Hopper",
+        level="intern",
+        industry="biotech",
+        company=None,
+        focus="bme",
+    )
+    assert created.focus == "bme"
+    store.close()

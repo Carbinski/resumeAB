@@ -12,14 +12,17 @@ import {
 } from "@/lib/sampleHistory";
 import { ACCEPTED_FORMATS } from "@/lib/brand";
 import { cn } from "@/lib/cn";
+import { trackVerdict } from "@/lib/elo";
 import { LABEL_MAX, labelFromFileName } from "@/lib/labels";
-import { ROLES } from "@/lib/roles";
+import { placedTrackDelta } from "@/lib/ratings";
+import { ROLE_BY_ID, labRoleIds, stripTrackIds, type TrackId } from "@/lib/roles";
 import type { CompareResult, ResumeVersion } from "@/lib/types";
 import { Balance } from "../Balance";
 import { useLadder } from "../LadderProvider";
 import { ResumeNameForm } from "../ResumeNameForm";
 import { Duels, PositionCheck, Verdict } from "../Results";
 import { Button, Magnetic } from "../ui/Button";
+import { DeltaChip } from "../ui/DeltaChip";
 import { EASE, Reveal } from "../ui/Reveal";
 import { SectionHeader } from "../ui/SectionHeader";
 import { Segmented } from "../ui/Segmented";
@@ -49,6 +52,35 @@ const RUN_STEPS = [
 ];
 
 const SECTION = "mx-auto max-w-[1180px] scroll-mt-24 px-5 pb-24 sm:px-8 md:pb-32";
+
+interface StripRow {
+  id: TrackId;
+  pB: number;
+  delta: number | null;
+}
+
+function TrackStrip({ rows }: { rows: StripRow[] }) {
+  return (
+    <div className="rounded-[28px] border border-bark/10 bg-cream/70 px-5 py-4 text-center">
+      <p className="text-[0.98rem] leading-relaxed text-ink">
+        {rows.map((row, index) => (
+          <span key={row.id}>
+            {index > 0 ? <span className="text-taupe"> · </span> : null}
+            {trackVerdict(ROLE_BY_ID[row.id].label, row.pB)}
+            {row.delta != null ? (
+              <span className="mx-1.5 inline-flex align-middle">
+                <DeltaChip delta={row.delta} />
+              </span>
+            ) : null}
+          </span>
+        ))}
+      </p>
+      <p className="mt-2 text-[0.85rem] leading-snug text-olive">
+        These calls do not move either ladder.
+      </p>
+    </div>
+  );
+}
 
 function LabHeader({ children }: { children: React.ReactNode }) {
   return (
@@ -265,7 +297,7 @@ function Slot({ active, children }: { active: boolean; children: React.ReactNode
 }
 
 export function Lab() {
-  const { history, current, role, setRole, addVersion, demo } = useLadder();
+  const { history, current, role, setRole, addVersion, demo, user } = useLadder();
   const lenis = useLenis();
   const stageRef = useRef<HTMLDivElement>(null);
 
@@ -277,6 +309,9 @@ export function Lab() {
   const [result, setResult] = useState<CompareResult | null>(null);
   const [savedAs, setSavedAs] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [strip, setStrip] = useState<{ aId: string; bId: string; rows: StripRow[] } | null>(null);
+  const [stripBusy, setStripBusy] = useState(false);
+  const [stripError, setStripError] = useState<string | null>(null);
 
   if (!current) {
     return (
@@ -321,6 +356,45 @@ export function Lab() {
     setResult(null);
     setSavedAs(null);
     setError(null);
+    setStripError(null);
+  };
+
+  const stripIds =
+    challenger && challenger.id !== a.id
+      ? stripTrackIds(demo, user?.focus, a.ratings, challenger.ratings)
+      : [];
+  const shownStrip =
+    strip && challenger && strip.aId === a.id && strip.bId === challenger.id ? strip : null;
+
+  const runStrip = async () => {
+    if (!challenger || stripBusy || stripIds.length === 0) return;
+    setStripError(null);
+    if (demo) {
+      const rows = stripIds.flatMap((id) => {
+        const stored = compareStoredScores(a, challenger, id, libraryIds);
+        if (!stored) return [];
+        return [{ id, pB: stored.pB, delta: placedTrackDelta(a, challenger, id) }];
+      });
+      setStrip({ aId: a.id, bId: challenger.id, rows });
+      return;
+    }
+    setStripBusy(true);
+    try {
+      const rows: StripRow[] = [];
+      for (const id of stripIds) {
+        const outcome = await compareVersions(a, challenger, id);
+        rows.push({
+          id,
+          pB: outcome.pB,
+          delta: placedTrackDelta(a, challenger, id),
+        });
+      }
+      setStrip({ aId: a.id, bId: challenger.id, rows });
+    } catch (caught) {
+      setStripError(caught instanceof Error ? caught.message : "Could not compare those tracks.");
+    } finally {
+      setStripBusy(false);
+    }
   };
 
   /** Brings the scale and its verdict into view, only if they are not already. */
@@ -396,9 +470,9 @@ export function Lab() {
   return (
     <section id="lab" className={SECTION}>
       <LabHeader>
-        Put your current resume on one side and the edited version on the
-        other. Ladder weighs them head to head, in both orders, on six
-        qualities.
+        {user && !demo
+          ? `Two ${current.level === "newgrad" ? "new-grad" : "intern"} resumes. A run judges this pair without moving the ladder. ELO changes when you keep a draft.`
+          : "Put your current resume on one side and the edited version on the other. Ladder weighs them head to head, in both orders, on six qualities."}
       </LabHeader>
 
       <Reveal className="relative mt-12 overflow-hidden rounded-[36px] border border-bark/10 bg-gradient-to-b from-white/60 to-peach/40 p-5 sm:p-8 md:mt-16 md:p-10">
@@ -507,7 +581,10 @@ export function Lab() {
               <Segmented
                 label="Role to judge for"
                 size="sm"
-                options={ROLES.map((r) => ({ id: r.id, label: r.label }))}
+                options={labRoleIds(demo, user?.focus).map((id) => ({
+                  id,
+                  label: ROLE_BY_ID[id].label,
+                }))}
                 value={role}
                 onChange={(r) => {
                   setRole(r);
@@ -543,6 +620,26 @@ export function Lab() {
             transition={{ duration: 0.9, ease: EASE }}
             className="overflow-hidden"
           >
+            {stripIds.length > 0 ? (
+              <div className="flex flex-col items-center gap-3 pt-6">
+                <Button variant="outline" disabled={stripBusy} onClick={() => void runStrip()}>
+                  {stripBusy ? "Comparing…" : "Compare each track"}
+                </Button>
+                {stripError ? (
+                  <p role="alert" className="text-center text-[0.86rem] text-clay">
+                    {stripError}
+                  </p>
+                ) : null}
+                {shownStrip && shownStrip.rows.length > 0 ? (
+                  <TrackStrip rows={shownStrip.rows} />
+                ) : (
+                  <p className="max-w-md text-center text-[0.85rem] leading-snug text-olive">
+                    These calls do not move either ladder.
+                  </p>
+                )}
+              </div>
+            ) : null}
+
             <div className="grid gap-5 pt-6 lg:grid-cols-12">
               <div className="glass rounded-[32px] p-5 sm:p-8 lg:col-span-8">
                 <Duels result={displayResult} />

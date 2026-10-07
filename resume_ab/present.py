@@ -8,6 +8,7 @@ from resume_ab.cohort import (
     LEVEL_LABELS,
     INDUSTRY_LABELS,
     MATCH_BUDGET,
+    ROLE_IDS,
     Neighbor,
     Person,
     band_label,
@@ -45,22 +46,22 @@ def version_payload(store: Store, resume: Resume) -> dict:
     return {
         "id": resume.id,
         "level": level,
+        "industry": resume.industry or "",
+        "company": resume.company,
         "label": resume.label or "Draft",
         "fileName": resume.file_name or "resume",
         "uploadedAt": resume.created_at,
         "note": resume.note,
         "ratings": {
             "overall": round(elo),
-            "ai": _role_elo(memberships, level, "ai"),
-            "cloud": _role_elo(memberships, level, "cloud"),
-            "fullstack": _role_elo(memberships, level, "fullstack"),
+            **{role: _role_elo(memberships, level, role) for role in ROLE_IDS},
         },
         "categories": {
             category_id: round(score)
             for category_id, score in store.category_scores(resume.id).items()
         },
         "roleStatus": {
-            role: _role_state(memberships, level, role) for role in ("ai", "cloud", "fullstack")
+            role: _role_state(memberships, level, role) for role in ROLE_IDS
         },
         "standing": {
             "status": status,
@@ -125,6 +126,7 @@ def user_payload(user) -> dict:
         "level": user.level,
         "industry": user.industry,
         "company": user.company,
+        "focus": user.focus or "",
     }
 
 

@@ -67,6 +67,7 @@ export interface SignupInput {
   level: "intern" | "newgrad";
   industry: string;
   company: string;
+  focus: string;
 }
 
 export function signup(input: SignupInput): Promise<Account> {

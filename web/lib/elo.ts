@@ -36,6 +36,14 @@ export function verdictFor(pB: number): Verdict {
   return "tie";
 }
 
+/** One cell of the lab strip, for example "AI & ML: A wins". */
+export function trackVerdict(label: string, pB: number): string {
+  const verdict = verdictFor(pB);
+  if (verdict === "b") return `${label}: B wins`;
+  if (verdict === "a") return `${label}: A wins`;
+  return `${label}: too close`;
+}
+
 /** Probability that A is stronger as seen by one reading order. */
 function pAInOrder(order: OrderResult): number {
   return order.left === "a" ? order.noul : 1 - order.noul;
