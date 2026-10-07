@@ -382,6 +382,55 @@ def test_named_upload_and_delete_one_resume(tmp_path: Path):
     assert capped.json()["label"] == "L" * 80
 
 
+def _variant(marker: str) -> bytes:
+    return RESUME.replace(
+        "- Built a queue for index rebuilds used by two campus departments.",
+        f"- Built a queue for index rebuilds used by two campus departments.\n- Note {marker}.",
+    ).encode()
+
+
+def test_auto_labels_skip_names_still_on_the_ladder(tmp_path: Path):
+    client, _judge, store = _client(tmp_path)
+    _signup(client, "ada@example.test", "Northwind")
+
+    def upload(name: str, marker: str, **data: str):
+        response = client.post(
+            "/versions",
+            files={"file": (name, _variant(marker), "text/plain")},
+            data=data,
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    named = upload("named.txt", "named", label="v2", draft="false")
+    assert named["label"] == "v2"
+    automatic = upload("auto.txt", "auto", draft="false")
+    assert automatic["label"] == "v1"
+
+    draft = upload("draft.txt", "draft", draft="true")
+    assert draft["label"] == "Draft"
+    stored = store.get_resume(draft["id"])
+    assert stored is not None and stored.label is None
+    published = client.post(f"/versions/{draft['id']}/publish")
+    assert published.status_code == 200, published.text
+    assert published.json()["label"] == "v3"
+
+    explicit = upload("explicit.txt", "explicit", label="Draft", draft="true")
+    assert explicit["label"] == "Draft"
+    kept = client.post(f"/versions/{explicit['id']}/publish")
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["label"] == "Draft"
+
+    deleted = client.delete(f"/versions/{automatic['id']}")
+    assert deleted.status_code == 200
+    reused = upload("reused.txt", "reused", draft="false")
+    assert reused["label"] == "v1"
+    labels = [item["label"] for item in client.get("/versions").json()]
+    assert labels.count("v1") == 1
+    assert labels.count("v2") == 1
+    assert labels.count("v3") == 1
+
+
 def test_overflow_keeps_the_rating_and_drops_the_oldest_file(tmp_path: Path):
     store = Store(tmp_path / "ladder.db", tmp_path / "blobs")
     user = store.create_user(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { deleteAccount, login, logout, signup, updateProfile } from "@/lib/api";
 import { INDUSTRIES, LEVELS, type LevelId } from "@/lib/cohort";
 import { useLadder } from "./LadderProvider";
@@ -32,6 +32,14 @@ export function Account() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    setNameOnResume(user?.nameOnResume ?? "");
+    setLevel(user?.level ?? "intern");
+    setIndustry(user?.industry ?? "software");
+    setCompany(user?.company ?? "");
+    setConfirmDelete(false);
+  }, [user]);
 
   const submit = async () => {
     if (demo) {

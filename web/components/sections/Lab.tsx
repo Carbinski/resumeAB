@@ -22,6 +22,20 @@ import { StepTicker } from "../ui/StepTicker";
 
 type Phase = "setup" | "running" | "result";
 
+/** A challenger stays on the scale only while it is still in the history, or it is the unsaved lab draft. */
+function visibleChallenger(
+  candidate: ResumeVersion | null,
+  history: ResumeVersion[],
+  draftId: string | null,
+  demo: boolean,
+): ResumeVersion | null {
+  if (!candidate) return null;
+  const listed = history.find((version) => version.id === candidate.id);
+  if (listed) return listed;
+  if (!demo && candidate.id === draftId) return candidate;
+  return null;
+}
+
 const RUN_STEPS = [
   "Reading both resumes",
   "A on the left, B on the right",
@@ -238,6 +252,7 @@ export function Lab() {
 
   const [aId, setAId] = useState<string | null>(null);
   const [b, setB] = useState<ResumeVersion | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [phase, setPhase] = useState<Phase>("setup");
   const [result, setResult] = useState<CompareResult | null>(null);
@@ -263,8 +278,19 @@ export function Lab() {
   }
 
   const a = history.find((v) => v.id === aId) ?? current;
-  const ready = !!b && b.id !== a.id && !drafting;
-  const bIsDraft = !!b && !history.some((v) => v.id === b.id);
+  const challenger = visibleChallenger(b, history, draftId, demo);
+  const ready = !!challenger && challenger.id !== a.id && !drafting;
+  const bIsDraft = !!challenger && !history.some((v) => v.id === challenger.id);
+  const shownResult =
+    result &&
+    challenger &&
+    result.a.id === a.id &&
+    result.b.id === challenger.id &&
+    result.role === role
+      ? result
+      : null;
+  const shownPhase: Phase = phase === "running" ? "running" : shownResult ? "result" : "setup";
+  const displayResult = phase === "running" ? result : shownResult;
 
   const reset = () => {
     setPhase("setup");
@@ -286,18 +312,18 @@ export function Lab() {
   };
 
   const run = async () => {
-    if (!b || !ready) return;
+    if (!challenger || !ready) return;
     setSavedAs(null);
     setError(null);
     frameStage();
     if (demo) {
-      setResult(compareSampleVersions(a, b, role));
+      setResult(compareSampleVersions(a, challenger, role));
       setPhase("result");
       return;
     }
     setPhase("running");
     try {
-      const outcome = await compareVersions(a, b, role);
+      const outcome = await compareVersions(a, challenger, role);
       setResult(outcome);
       setPhase("result");
     } catch (caught) {
@@ -310,6 +336,7 @@ export function Lab() {
     if (demo || !result) return;
     const published = await addVersion(result.b);
     if (!published) return;
+    setDraftId(null);
     setB(published);
     setSavedAs(published.label);
   };
@@ -321,11 +348,11 @@ export function Lab() {
 
   const hint = drafting
     ? "Rating your edit…"
-    : !b
+    : !challenger
       ? demo
         ? "Sample history. Choose two versions. The comparison stays on this page."
         : "Choose a baseline, then add the version you changed."
-      : b.id === a.id
+      : challenger.id === a.id
         ? "Pick two different versions to compare."
         : demo
           ? "Ready. This uses the saved scores, not a live rating."
@@ -372,6 +399,7 @@ export function Lab() {
                 baseline={a}
                 onBusy={setDrafting}
                 onDraft={(v) => {
+                  setDraftId(v.id);
                   setB(v);
                   reset();
                 }}
@@ -381,8 +409,9 @@ export function Lab() {
                 <VersionChips
                   label="Challenger version"
                   versions={history.filter((v) => v.id !== a.id)}
-                  selectedId={b?.id}
+                  selectedId={challenger?.id}
                   onSelect={(v) => {
+                    setDraftId(null);
                     setB(v);
                     reset();
                   }}
@@ -395,22 +424,22 @@ export function Lab() {
         <div ref={stageRef} className="mt-8 md:mt-10">
           <Balance
             a={a}
-            b={b}
+            b={challenger}
             role={role}
-            phase={phase}
-            pB={result ? result.pB : null}
-            eloA={result ? result.eloA : null}
-            eloB={result ? result.eloB : null}
+            phase={shownPhase}
+            pB={displayResult ? displayResult.pB : null}
+            eloA={displayResult ? displayResult.eloA : null}
+            eloB={displayResult ? displayResult.eloB : null}
             pendingB={drafting}
           />
 
           <div className="mt-2 grid min-h-[15rem] sm:min-h-[12.75rem]">
-            <Slot active={phase === "setup"}>
+            <Slot active={shownPhase === "setup"}>
               <p className="max-w-sm text-center text-[1.05rem] leading-snug text-olive">
                 {error ?? hint}
               </p>
             </Slot>
-            <Slot active={phase === "running"}>
+            <Slot active={shownPhase === "running"}>
               <div className="w-full max-w-md">
                 <StepTicker steps={RUN_STEPS} intervalMs={750} className="justify-center text-center" />
                 <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-bark/10">
@@ -423,15 +452,20 @@ export function Lab() {
                 </div>
               </div>
             </Slot>
-            <Slot active={phase === "result"}>
-              {result ? <Verdict key={`${result.a.id}-${result.b.id}-${result.role}`} result={result} /> : null}
+            <Slot active={shownPhase === "result"}>
+              {displayResult ? (
+                <Verdict
+                  key={`${displayResult.a.id}-${displayResult.b.id}-${displayResult.role}`}
+                  result={displayResult}
+                />
+              ) : null}
             </Slot>
           </div>
 
           <div className="mt-4 flex flex-col items-center gap-5">
             <Magnetic>
-              <Button className="h-12 min-w-[12rem] px-8" disabled={!ready || phase === "running"} onClick={run}>
-                {phase === "running" ? "Weighing…" : phase === "result" ? "Run it again" : "Run comparison"}
+              <Button className="h-12 min-w-[12rem] px-8" disabled={!ready || shownPhase === "running"} onClick={run}>
+                {shownPhase === "running" ? "Weighing…" : shownPhase === "result" ? "Run it again" : "Run comparison"}
               </Button>
             </Magnetic>
             {demo ? (
@@ -456,7 +490,7 @@ export function Lab() {
         </div>
       </Reveal>
 
-      {phase === "result" && result ? (
+      {shownPhase === "result" && displayResult ? (
         <div className="mt-5 flex justify-center">
           <a
             href="#lab-result"
@@ -468,7 +502,7 @@ export function Lab() {
       ) : null}
 
       <AnimatePresence initial={false}>
-        {phase === "result" && result ? (
+        {shownPhase === "result" && displayResult ? (
           <motion.div
             key="details"
             id="lab-result"
@@ -480,10 +514,10 @@ export function Lab() {
           >
             <div className="grid gap-5 pt-6 lg:grid-cols-12">
               <div className="glass rounded-[32px] p-5 sm:p-8 lg:col-span-8">
-                <Duels result={result} />
+                <Duels result={displayResult} />
               </div>
               <div className="rounded-[32px] border border-bark/10 bg-white/40 p-5 sm:p-8 lg:col-span-4">
-                <PositionCheck result={result} />
+                <PositionCheck result={displayResult} />
               </div>
             </div>
 
@@ -492,9 +526,9 @@ export function Lab() {
                 <p role="status" className="rounded-full bg-peach px-5 py-3 text-[0.9rem] text-bark">
                   Saved as {savedAs}. It now counts toward your ELO history.
                 </p>
-              ) : b && bIsDraft ? (
+              ) : challenger && bIsDraft ? (
                 <Button variant="ink" onClick={() => void keep()} className="max-w-full">
-                  <span className="max-w-[18rem] truncate">Keep {b.label}</span>
+                  <span className="max-w-[18rem] truncate">Keep {challenger.label}</span>
                 </Button>
               ) : null}
               <Button variant="outline" onClick={backToStage}>

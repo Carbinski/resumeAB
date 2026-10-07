@@ -80,7 +80,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
   const ay = y(scoreOf(active, role));
   const beforeScore = before ? before.ratings[role] : null;
   const activeScore = active.ratings[role];
-  const delta = beforeScore != null && activeScore != null ? activeScore - beforeScore : 0;
+  const delta = beforeScore != null && activeScore != null ? activeScore - beforeScore : null;
   const ticks = y.ticks(4);
   const showCenter = ELO_CENTER > y.domain()[0] && ELO_CENTER < y.domain()[1];
 
@@ -293,7 +293,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
               <span className="font-mono text-[0.7rem] text-olive">
                 {active.label} · {formatDate(active.uploadedAt, "long")}
               </span>
-              {before ? (
+              {delta != null ? (
                 <span
                   className={`font-mono text-[0.7rem] ${
                     delta >= 0 ? "text-bark" : "text-clay"
