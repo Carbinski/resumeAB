@@ -146,7 +146,7 @@ const STEPS = [
 
 export function HowItWorks() {
   return (
-    <section id="how" className="mx-auto max-w-[1180px] scroll-mt-24 px-5 py-20 sm:px-8 md:py-28">
+    <section id="how" className="mx-auto max-w-[1180px] scroll-mt-28 px-5 py-20 sm:px-8 md:py-28">
       <SectionHeader
         index="01"
         label="How it works"

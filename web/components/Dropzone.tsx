@@ -43,7 +43,7 @@ export function Dropzone({ dragging }: { dragging: boolean }) {
   const lenis = useLenis();
 
   const viewRating = () => {
-    if (lenis) lenis.scrollTo("#rating", { offset: -88, duration: 1.4 });
+    if (lenis) lenis.scrollTo("#rating", { duration: 1.4 });
     else document.getElementById("rating")?.scrollIntoView({ behavior: "smooth" });
   };
 
@@ -84,7 +84,7 @@ export function Dropzone({ dragging }: { dragging: boolean }) {
             <button
               type="button"
               onClick={pickFile}
-              className="shrink-0 rounded-full border border-bark/20 px-4 py-2 text-[0.85rem] text-ink transition-colors hover:bg-white/70"
+              className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-bark/20 px-4 text-[0.85rem] text-ink transition-colors hover:bg-white/70"
             >
               Browse files
             </button>

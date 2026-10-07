@@ -13,7 +13,7 @@ const LINKS = [
 ];
 
 const itemClass =
-  "flex w-full items-center justify-center whitespace-nowrap rounded-full px-1 py-2 text-center text-[0.72rem] text-olive transition-colors hover:bg-white/70 hover:text-ink min-[400px]:text-[0.78rem] sm:px-2 sm:text-[0.84rem] md:text-[0.88rem]";
+  "flex min-h-11 w-full items-center justify-center whitespace-nowrap rounded-full px-1 text-center text-[0.72rem] text-olive transition-colors hover:bg-white/70 hover:text-ink min-[400px]:text-[0.78rem] sm:px-2 sm:text-[0.84rem] md:text-[0.88rem]";
 
 export function Wordmark({ className }: { className?: string }) {
   return (

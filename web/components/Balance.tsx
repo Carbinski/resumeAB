@@ -80,12 +80,12 @@ function Pan({
       </svg>
       <div
         className={cn(
-          "glass flex h-[92px] flex-col items-center justify-center rounded-[20px] px-2 text-center transition-shadow duration-700 sm:h-[104px] sm:rounded-[24px]",
+          "glass flex h-[118px] flex-col items-center justify-center rounded-[20px] px-2 text-center transition-shadow duration-700 sm:h-[112px] sm:rounded-[24px]",
           winner && "shadow-[0_0_0_2px_#BC7767,0_24px_44px_-18px_rgba(188,119,103,0.65)]",
           !version && !pending && "border-dashed",
         )}
       >
-        <p className="w-full truncate px-2 font-mono text-[0.64rem] uppercase tracking-[0.16em] text-olive">
+        <p className="line-clamp-2 w-full px-1 text-center font-mono text-[0.62rem] uppercase leading-tight text-olive">
           {tag}
           {version ? ` · ${version.label}` : ""}
         </p>
@@ -100,7 +100,9 @@ function Pan({
               {score}
             </p>
             {version ? (
-              <p className="mt-1 w-full truncate text-[0.68rem] text-olive">{version.fileName}</p>
+              <p className="mt-1 w-full px-1 text-center text-[0.68rem] leading-tight text-olive [overflow-wrap:anywhere]">
+                {version.fileName}
+              </p>
             ) : null}
           </>
         ) : version ? (

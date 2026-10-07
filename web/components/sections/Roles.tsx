@@ -59,8 +59,8 @@ function Rung({
         onClick={onSelect}
         className="relative block w-full rounded-[24px] py-5 text-left"
       >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <div className="min-w-0 flex-1 basis-48">
             <div className="flex items-center gap-3">
               <span
                 className={cn(
@@ -218,7 +218,7 @@ function AddRole() {
         placeholder="Senior ML Engineer, Search Relevance. You will own ranking models end to end…"
         className="mt-4 w-full resize-none rounded-2xl border border-bark/15 bg-cream/70 p-4 text-[0.9rem] leading-relaxed text-ink outline-none transition-colors placeholder:text-taupe focus:border-clay"
       />
-      <div className="mt-3 flex items-center justify-between gap-3">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <Button
           type="button"
           disabled={text.trim().length < 20 || busy}
@@ -248,7 +248,7 @@ export function Roles() {
   const roles = visibleRoleIds(demo, user?.focus);
 
   return (
-    <section id="roles" className="mx-auto max-w-[1180px] scroll-mt-24 px-5 pb-20 sm:px-8 md:pb-28">
+    <section id="roles" className="mx-auto max-w-[1180px] scroll-mt-28 px-5 pb-20 sm:px-8 md:pb-28">
       <SectionHeader
         index="03"
         label="Role lens"
@@ -262,8 +262,8 @@ export function Roles() {
         team. Pick a lens and the chart above follows.
       </SectionHeader>
 
-      <div className="mt-12 grid gap-8 md:mt-16 lg:grid-cols-12 lg:gap-12">
-        <Reveal className="lg:col-span-8">
+      <div className="mt-12 grid min-w-0 gap-8 md:mt-16 lg:grid-cols-12 lg:gap-12">
+        <Reveal className="min-w-0 lg:col-span-8">
           <div role="radiogroup" aria-label="Role" className="divide-y divide-bark/10">
             {roles.map((roleId, i) => (
               <div key={roleId} className="py-1">
@@ -285,7 +285,7 @@ export function Roles() {
             <span aria-hidden>↑</span>
           </a>
         </Reveal>
-        <Reveal delay={0.1} className="lg:col-span-4">
+        <Reveal delay={0.1} className="min-w-0 lg:col-span-4">
           <AddRole />
         </Reveal>
       </div>

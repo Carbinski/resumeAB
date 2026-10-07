@@ -19,6 +19,7 @@ import { useWindowFileDrop } from "@/lib/useWindowFileDrop";
 import { cn } from "@/lib/cn";
 import { Dropzone } from "../Dropzone";
 import { useLadder } from "../LadderProvider";
+import { useElementWidth } from "@/lib/useElementWidth";
 import { Magnetic, buttonClass } from "../ui/Button";
 import { CategoryGlyph } from "../ui/CategoryGlyph";
 import { DeltaChip } from "../ui/DeltaChip";
@@ -29,6 +30,7 @@ import { Sparkline } from "../ui/Sparkline";
 const INNER = { rx: 31, ry: 37 };
 const OUTER = { rx: 43, ry: 44 };
 const CATEGORY_ANGLES = [-150, -90, -30, 30, 90, 150];
+const TABLET_SIDE_COS = Math.cos((30 * Math.PI) / 180);
 const ROLE_ANGLES = [-176, -8, 56];
 const MARKETING_TRACKS: readonly RoleId[] = ["ai", "cloud", "fullstack"];
 
@@ -129,7 +131,7 @@ function RoleChip({ role, value }: { role: RoleTrack; value: number | null }) {
   );
 }
 
-function ScoreCard({ dragging }: { dragging: boolean }) {
+function ScoreCard({ dragging, width }: { dragging: boolean; width?: number }) {
   const { history, current, user, demo } = useLadder();
   if (!current) {
     const ladder = user?.level === "newgrad" ? "new-grad" : "intern";
@@ -140,6 +142,7 @@ function ScoreCard({ dragging }: { dragging: boolean }) {
     return (
       <motion.div
         className="glass relative z-20 w-[min(62vw,248px)] rounded-[30px] p-4 text-center sm:p-5"
+        style={width ? { width } : undefined}
         initial={{ opacity: 0, y: 24, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: dragging ? 1.05 : 1 }}
         transition={{ duration: 1, ease: EASE, delay: 0.55 }}
@@ -147,7 +150,14 @@ function ScoreCard({ dragging }: { dragging: boolean }) {
         <p className="text-[0.66rem] font-medium uppercase tracking-[0.2em] text-olive">
           Overall ELO
         </p>
-        <p className="font-display mt-1 text-[clamp(3.6rem,10vw,5.4rem)] leading-none text-ink">—</p>
+        <p
+          className={cn(
+            "font-display mt-1 leading-none text-ink",
+            width && width < 190 ? "text-[3.1rem]" : "text-[clamp(3.6rem,10vw,5.4rem)]",
+          )}
+        >
+          —
+        </p>
         <p className="mt-2 text-[0.74rem] leading-snug text-olive">{empty}</p>
       </motion.div>
     );
@@ -159,6 +169,7 @@ function ScoreCard({ dragging }: { dragging: boolean }) {
   return (
     <motion.div
       className="glass relative z-20 w-[min(62vw,248px)] rounded-[30px] p-4 text-center sm:p-5"
+      style={width ? { width } : undefined}
       initial={{ opacity: 0, y: 24, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: dragging ? 1.05 : 1 }}
       transition={{ duration: 1, ease: EASE, delay: 0.55 }}
@@ -168,16 +179,19 @@ function ScoreCard({ dragging }: { dragging: boolean }) {
       </p>
       <Odometer
         value={overall}
-        className="font-display mt-1 text-[clamp(3.6rem,10vw,5.4rem)] leading-none text-ink"
+        className={cn(
+          "font-display mt-1 leading-none text-ink",
+          width && width < 190 ? "text-[3.1rem]" : "text-[clamp(3.6rem,10vw,5.4rem)]",
+        )}
       />
-      <div className="mt-2 flex items-center justify-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
         <DeltaChip delta={delta} />
         <span className="text-[0.74rem] text-olive">since {prev?.label ?? "start"}</span>
       </div>
       <div className="mt-3 flex justify-center">
         <Sparkline values={history.map((v) => v.ratings.overall)} width={150} height={34} />
       </div>
-      <p className="mt-2 hidden text-[0.74rem] leading-snug text-olive sm:block">
+      <p className="mt-2 hidden text-[0.74rem] leading-snug text-olive lg:block">
         Beats the average resume {formatPercent(beatsAverage(overall))} of the time.
       </p>
     </motion.div>
@@ -192,10 +206,27 @@ function OrbitStage({ dragging }: { dragging: boolean }) {
   const rawY = useMotionValue(0);
   const mx = useSpring(rawX, { stiffness: 60, damping: 18 });
   const my = useSpring(rawY, { stiffness: 60, damping: 18 });
+  const [stageRef, stageWidth] = useElementWidth<HTMLDivElement>(360);
+  const crowded = stageWidth >= 520 && stageWidth < 900;
+  const chipHalf = 84;
+  const gap = 12;
+  const edge = 8;
+  const maxCenter = stageWidth - edge - chipHalf;
+  let cardWidth = 200;
+  let chipCenter = (stageWidth + cardWidth) / 2 + gap + chipHalf;
+  if (chipCenter > maxCenter) {
+    chipCenter = maxCenter;
+    cardWidth = Math.max(148, 2 * (chipCenter - gap - chipHalf) - stageWidth);
+  }
+  const inner = crowded
+    ? { rx: (chipCenter / stageWidth * 100 - 50) / TABLET_SIDE_COS, ry: 44 }
+    : INNER;
+  const categoryAngles = CATEGORY_ANGLES;
 
   return (
     <div
-      className="relative mx-auto h-[670px] w-full max-w-[1020px] sm:h-[560px]"
+      ref={stageRef}
+      className="relative mx-auto h-[670px] w-full max-w-[1020px] md:h-[780px] lg:h-[560px]"
       onPointerMove={(e) => {
         if (reduce || e.pointerType === "touch") return;
         const r = e.currentTarget.getBoundingClientRect();
@@ -207,7 +238,7 @@ function OrbitStage({ dragging }: { dragging: boolean }) {
         rawY.set(0);
       }}
     >
-      {[INNER, OUTER].map((ring, i) => (
+      {[inner, OUTER].map((ring, i) => (
         <motion.div
           key={i}
           aria-hidden
@@ -232,13 +263,13 @@ function OrbitStage({ dragging }: { dragging: boolean }) {
       ) : null}
 
       <div className="absolute inset-0 flex items-center justify-center">
-        <ScoreCard dragging={dragging} />
+        <ScoreCard dragging={dragging} width={crowded ? cardWidth : undefined} />
       </div>
 
       {CATEGORIES.map((def, i) => (
         <OrbitChip
           key={def.id}
-          pos={polar(INNER, CATEGORY_ANGLES[i])}
+          pos={polar(inner, categoryAngles[i])}
           depth={14 + (i % 3) * 6}
           index={i}
           mx={mx}

@@ -51,7 +51,7 @@ export function ResumeNameForm({
           <button
             type="submit"
             disabled={!trimmed || busy}
-            className="rounded-full bg-ink px-4 py-2.5 text-[0.85rem] text-cream transition-colors hover:bg-bark disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-11 items-center rounded-full bg-ink px-4 text-[0.85rem] text-cream transition-colors hover:bg-bark disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitLabel}
           </button>

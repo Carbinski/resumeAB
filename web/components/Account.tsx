@@ -136,7 +136,7 @@ export function Account() {
   };
 
   return (
-    <section id="account" className="mx-auto max-w-[720px] scroll-mt-24 px-5 pb-8 sm:px-8">
+    <section id="account" className="mx-auto max-w-[720px] scroll-mt-28 px-5 pb-8 sm:px-8">
       <div className="rounded-[32px] border border-bark/10 bg-white/40 p-5 sm:p-7">
         <p className="text-[0.72rem] font-medium uppercase tracking-[0.18em] text-olive">Account</p>
         <h2 className="font-display mt-2 text-[2rem] leading-none text-ink">
@@ -178,7 +178,7 @@ export function Account() {
                   key={item}
                   type="button"
                   onClick={() => setMode(item)}
-                  className={`rounded-full px-4 py-1.5 text-[0.85rem] ${
+                  className={`inline-flex min-h-11 items-center rounded-full px-4 text-[0.85rem] ${
                     mode === item ? "bg-ink text-cream" : "text-olive"
                   }`}
                 >
@@ -313,7 +313,7 @@ function ProfileFields({
             key={item.id}
             type="button"
             onClick={() => setLevel(item.id)}
-            className={`rounded-full border px-4 py-2 text-[0.85rem] ${
+            className={`inline-flex min-h-11 items-center rounded-full border px-4 text-[0.85rem] ${
               level === item.id ? "border-ink bg-ink text-cream" : "border-bark/20 text-olive"
             }`}
           >
