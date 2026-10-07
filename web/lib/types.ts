@@ -12,7 +12,7 @@ export interface RoleRatings {
 
 export interface RatingSnapshot {
   ratings: RoleRatings;
-  /** Category strength on the same Elo scale. Empty until a second version is compared. */
+  /** Category strength on the same Elo scale. Empty when those scores were not saved. */
   categories: Partial<Record<CategoryId, number>>;
 }
 

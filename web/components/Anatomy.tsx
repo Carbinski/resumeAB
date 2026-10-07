@@ -43,8 +43,7 @@ export function Anatomy({
           Anatomy of {version.label}
         </h3>
         <p className="mt-4 text-[0.9rem] leading-relaxed text-olive">
-          Quality scores show up with your second version. That comparison asks the six
-          questions alongside the head-to-head.
+          Quality scores could not be loaded.
         </p>
       </div>
     );
