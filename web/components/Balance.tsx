@@ -1,23 +1,42 @@
 "use client";
 
 import { motion, type Transition } from "motion/react";
-import { clamp } from "@/lib/elo";
+import { ELO_SCALE, clamp } from "@/lib/elo";
 import { cn } from "@/lib/cn";
 import type { ResumeVersion } from "@/lib/types";
 import type { RoleId } from "@/lib/roles";
 
 export type BalancePhase = "setup" | "running" | "result";
 
-const MAX_TILT = 12;
+/** One Elo scale step (10-to-1) is a full, obvious tip. */
+const MAX_TILT = 18;
 const SWAY = [0, -5, 4, -3, 2, -1, 0];
 
 const SETTLE: Transition = { type: "spring", stiffness: 58, damping: 9, mass: 1 };
 const WEIGH: Transition = { duration: 2.4, repeat: Infinity, ease: "easeInOut" };
 
+/** The number actually drawn on a pan, or null when that side is not numeric. */
+function shownScore(
+  version: ResumeVersion | null,
+  role: RoleId,
+  judged: number | null,
+  pending: boolean,
+): number | null {
+  if (!version || pending) return null;
+  if (judged != null) return Math.round(judged);
+  const rating = version.ratings[role];
+  return rating == null ? null : Math.round(rating);
+}
+
+/** Positive degrees sink the right pan, so the higher score is heavier. */
+function tiltFor(left: number, right: number): number {
+  return clamp(((right - left) / ELO_SCALE) * MAX_TILT, -MAX_TILT, MAX_TILT);
+}
+
 function Pan({
   tag,
   version,
-  role,
+  score,
   winner,
   pending,
   counter,
@@ -26,7 +45,7 @@ function Pan({
 }: {
   tag: "A" | "B";
   version: ResumeVersion | null;
-  role: RoleId;
+  score: number | null;
   winner: boolean;
   pending?: boolean;
   counter: number | number[];
@@ -71,13 +90,17 @@ function Pan({
             <span className="h-3 w-3 animate-spin rounded-full border-2 border-bark/20 border-t-clay" />
             Rating…
           </span>
-        ) : version ? (
+        ) : score != null ? (
           <>
             <p className="font-display text-[2.1rem] leading-none text-ink sm:text-[2.7rem]">
-              {version.ratings[role]}
+              {score}
             </p>
-            <p className="mt-1 w-full truncate text-[0.68rem] text-olive">{version.fileName}</p>
+            {version ? (
+              <p className="mt-1 w-full truncate text-[0.68rem] text-olive">{version.fileName}</p>
+            ) : null}
           </>
+        ) : version ? (
+          <p className="mt-2 text-[0.78rem] leading-snug text-taupe">Not rated for this role</p>
         ) : (
           <p className="mt-1 max-w-[12ch] text-[0.76rem] leading-snug text-taupe">{empty}</p>
         )}
@@ -94,6 +117,8 @@ export function Balance({
   phase,
   pB,
   pendingB,
+  eloA = null,
+  eloB = null,
 }: {
   a: ResumeVersion | null;
   b: ResumeVersion | null;
@@ -101,15 +126,19 @@ export function Balance({
   phase: BalancePhase;
   pB: number | null;
   pendingB: boolean;
+  /** Scores from the comparison, once that result exists for the judged role. */
+  eloA?: number | null;
+  eloB?: number | null;
 }) {
   const running = phase === "running";
-  const angle =
-    phase === "result" && pB !== null ? clamp((pB - 0.5) * 40, -MAX_TILT, MAX_TILT) : 0;
+  const scoreA = shownScore(a, role, eloA, false);
+  const scoreB = shownScore(b, role, eloB, pendingB);
+  const settled = scoreA != null && scoreB != null ? tiltFor(scoreA, scoreB) : 0;
   const winnerB = phase === "result" && pB !== null && pB >= 0.55;
   const winnerA = phase === "result" && pB !== null && pB <= 0.45;
 
-  const beam = running ? SWAY : angle;
-  const counter = running ? SWAY.map((d) => -d) : -angle;
+  const beam = running ? SWAY : settled;
+  const counter = running ? SWAY.map((d) => -d) : -settled;
   const transition = running ? WEIGH : SETTLE;
 
   return (
@@ -128,7 +157,7 @@ export function Balance({
           <Pan
             tag="A"
             version={a}
-            role={role}
+            score={scoreA}
             winner={winnerA}
             counter={counter}
             transition={transition}
@@ -139,7 +168,7 @@ export function Balance({
           <Pan
             tag="B"
             version={b}
-            role={role}
+            score={scoreB}
             winner={winnerB}
             pending={pendingB}
             counter={counter}

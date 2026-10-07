@@ -341,6 +341,8 @@ export function Lab() {
             role={role}
             phase={phase}
             pB={result ? result.pB : null}
+            eloA={result ? result.eloA : null}
+            eloB={result ? result.eloB : null}
             pendingB={drafting}
           />
 
