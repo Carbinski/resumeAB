@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { deleteAccount, login, logout, signup, updateProfile } from "@/lib/api";
 import { FOCUSES, INDUSTRIES, LEVELS, suggestedFocus, type FocusId, type LevelId } from "@/lib/cohort";
+import type { Account as Profile } from "@/lib/types";
 import { useLadder } from "./LadderProvider";
 import { Button } from "./ui/Button";
 
@@ -10,6 +11,8 @@ const fieldClass =
   "w-full rounded-2xl border border-bark/15 bg-cream/70 px-4 py-3 text-[0.92rem] text-ink outline-none transition-colors placeholder:text-taupe focus:border-clay";
 
 const selectClass = `${fieldClass} appearance-none pr-11 [-webkit-appearance:none] [color-scheme:light]`;
+
+const optionClass = "bg-cream text-ink";
 
 function isCurrentIndustry(id: string): boolean {
   return INDUSTRIES.some((item) => item.id === id);
@@ -20,29 +23,89 @@ function retiredIndustryLabel(id: string): string {
   return id.charAt(0).toUpperCase() + id.slice(1);
 }
 
+function profileFrom(user: Profile | null) {
+  const industry = user?.industry ?? "software";
+  return {
+    nameOnResume: user?.nameOnResume ?? "",
+    level: user?.level ?? "intern",
+    industry,
+    company: user?.company ?? "",
+    focus: user?.focus ?? suggestedFocus(industry),
+    focusTouched: user != null,
+  };
+}
+
+function Chevron() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 20 20"
+      className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-olive"
+      fill="none"
+    >
+      <path
+        d="M5 7.5 10 12.5 15 7.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function SelectField({
+  label,
+  hint,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label className="grid gap-1.5 text-[0.78rem] text-olive">
+      {label}
+      {hint ? <span className="text-[0.86rem] leading-relaxed">{hint}</span> : null}
+      <span className="relative block">
+        <select className={selectClass} value={value} onChange={(event) => onChange(event.target.value)}>
+          {children}
+        </select>
+        <Chevron />
+      </span>
+    </label>
+  );
+}
+
 export function Account() {
   const { user, setUser, offline, refresh, signOut, demo } = useLadder();
   const [mode, setMode] = useState<"signup" | "login">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [nameOnResume, setNameOnResume] = useState(user?.nameOnResume ?? "");
-  const [level, setLevel] = useState<LevelId>(user?.level ?? "intern");
-  const [industry, setIndustry] = useState(user?.industry ?? "software");
-  const [company, setCompany] = useState(user?.company ?? "");
-  const [focus, setFocus] = useState<FocusId | "">(user?.focus ?? suggestedFocus(user?.industry ?? "software"));
-  const [focusTouched, setFocusTouched] = useState(!!user);
+  const initial = profileFrom(user);
+  const [nameOnResume, setNameOnResume] = useState(initial.nameOnResume);
+  const [level, setLevel] = useState<LevelId>(initial.level);
+  const [industry, setIndustry] = useState(initial.industry);
+  const [company, setCompany] = useState(initial.company);
+  const [focus, setFocus] = useState<FocusId | "">(initial.focus);
+  const [focusTouched, setFocusTouched] = useState(initial.focusTouched);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [loadedUser, setLoadedUser] = useState(user);
   if (loadedUser !== user) {
+    const next = profileFrom(user);
     setLoadedUser(user);
-    setNameOnResume(user?.nameOnResume ?? "");
-    setLevel(user?.level ?? "intern");
-    setIndustry(user?.industry ?? "software");
-    setCompany(user?.company ?? "");
-    setFocus(user?.focus ?? suggestedFocus(user?.industry ?? "software"));
-    setFocusTouched(!!user);
+    setNameOnResume(next.nameOnResume);
+    setLevel(next.level);
+    setIndustry(next.industry);
+    setCompany(next.company);
+    setFocus(next.focus);
+    setFocusTouched(next.focusTouched);
     setConfirmDelete(false);
   }
 
@@ -226,10 +289,7 @@ export function Account() {
                 type="button"
                 className="text-[0.85rem] text-olive underline decoration-bark/25 underline-offset-4"
                 onClick={() => {
-                  if (demo) {
-                    setError("Leave sample history before logging out.");
-                    return;
-                  }
+                  if (blockDemo("Leave sample history before logging out.")) return;
                   void logout().then(() => signOut());
                 }}
               >
@@ -321,81 +381,40 @@ function ProfileFields({
           </button>
         ))}
       </div>
-      <label className="grid gap-1.5 text-[0.78rem] text-olive">
-        Industry
-        <span className="relative block">
-          <select
-            className={selectClass}
-            value={industry}
-            onChange={(event) => {
-              const next = event.target.value;
-              setIndustry(next);
-              if (suggestFocus) setFocus(suggestedFocus(next));
-            }}
-          >
-            {isCurrentIndustry(industry) ? null : (
-              <option value={industry} disabled className="bg-cream text-ink">
-                {retiredIndustryLabel(industry)}
-              </option>
-            )}
-            {INDUSTRIES.map((item) => (
-              <option key={item.id} value={item.id} className="bg-cream text-ink">
-                {item.label}
-              </option>
-            ))}
-          </select>
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 20 20"
-            className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-olive"
-            fill="none"
-          >
-            <path
-              d="M5 7.5 10 12.5 15 7.5"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
-      </label>
-      <label className="grid gap-1.5 text-[0.78rem] text-olive">
-        Focus
-        <span className="text-[0.86rem] leading-relaxed">
-          Degree family. It chooses the tracks and can differ from the industry.
-        </span>
-        <span className="relative block">
-          <select
-            className={selectClass}
-            value={focus}
-            onChange={(event) => chooseFocus(event.target.value as FocusId | "")}
-          >
-            <option value="" className="bg-cream text-ink">
-              Choose a focus
-            </option>
-            {FOCUSES.map((item) => (
-              <option key={item.id} value={item.id} className="bg-cream text-ink">
-                {item.label}
-              </option>
-            ))}
-          </select>
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 20 20"
-            className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-olive"
-            fill="none"
-          >
-            <path
-              d="M5 7.5 10 12.5 15 7.5"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
-      </label>
+      <SelectField
+        label="Industry"
+        value={industry}
+        onChange={(next) => {
+          setIndustry(next);
+          if (suggestFocus) setFocus(suggestedFocus(next));
+        }}
+      >
+        {isCurrentIndustry(industry) ? null : (
+          <option value={industry} disabled className={optionClass}>
+            {retiredIndustryLabel(industry)}
+          </option>
+        )}
+        {INDUSTRIES.map((item) => (
+          <option key={item.id} value={item.id} className={optionClass}>
+            {item.label}
+          </option>
+        ))}
+      </SelectField>
+      <SelectField
+        label="Focus"
+        hint="Degree family. It chooses the tracks and can differ from the industry."
+        value={focus}
+        onChange={(value) => chooseFocus(value as FocusId | "")}
+      >
+        <option value="" className={optionClass}>
+          Choose a focus
+        </option>
+        {FOCUSES.map((item) => (
+          <option key={item.id} value={item.id} className={optionClass}>
+            {item.label}
+          </option>
+        ))}
+      </SelectField>
       <label className="grid gap-1.5 text-[0.78rem] text-olive">
         Most recent company
         <input

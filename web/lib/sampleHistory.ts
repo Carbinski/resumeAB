@@ -1,7 +1,7 @@
 import { CATEGORIES, type CategoryId } from "./categories";
 import { winProbability } from "./elo";
 import { categoryElo, placedRoleScore } from "./ratings";
-import type { RoleId } from "./roles";
+import { TRACK_IDS, type RoleId, type TrackId } from "./roles";
 import type {
   CategoryDuel,
   CompareResult,
@@ -12,10 +12,7 @@ import type {
   Standing,
 } from "./types";
 
-/**
- * Client-only history for one fictional intern, Jordan Hale.
- * Scores are baked in. Nothing here is uploaded or sent to the judge.
- */
+/** Client-only scores for Jordan Hale. Nothing here is uploaded or judged. */
 const BANDS = [
   { id: "under-900", label: "Under 900" },
   { id: "900–1000", label: "900–1000" },
@@ -62,22 +59,20 @@ function standing(
   };
 }
 
-function roleRun(score: number | null) {
-  return score == null ? null : { status: "rated" as const, message: null };
+function ratings(overall: number, tracks: Partial<Record<TrackId, number | null>>): RoleRatings {
+  const filled = Object.fromEntries(
+    TRACK_IDS.map((id) => [id, tracks[id] ?? null]),
+  ) as Record<TrackId, number | null>;
+  return { overall, ...filled };
 }
 
-function ratings(overall: number, ai: number | null, cloud: number | null): RoleRatings {
-  return {
-    overall,
-    ai,
-    cloud,
-    fullstack: null,
-    embedded: null,
-    mechanical: null,
-    flight: null,
-    devices: null,
-    biodata: null,
-  };
+function roleStatus(tracks: Partial<Record<TrackId, number | null>>): ResumeVersion["roleStatus"] {
+  return Object.fromEntries(
+    TRACK_IDS.map((id) => [
+      id,
+      tracks[id] == null ? null : { status: "rated" as const, message: null },
+    ]),
+  ) as ResumeVersion["roleStatus"];
 }
 
 function sample(row: {
@@ -95,7 +90,7 @@ function sample(row: {
   counts: readonly [number, number, number, number, number];
   neighbors: readonly NeighborSpec[];
 }): ResumeVersion {
-  const cloud = row.cloud ?? null;
+  const tracks = { ai: row.ai, cloud: row.cloud ?? null };
   return {
     level: "intern",
     industry: "software",
@@ -105,18 +100,9 @@ function sample(row: {
     fileName: row.fileName,
     uploadedAt: row.uploadedAt,
     note: row.note,
-    ratings: ratings(row.overall, row.ai, cloud),
+    ratings: ratings(row.overall, tracks),
     categories: row.categories,
-    roleStatus: {
-      ai: roleRun(row.ai),
-      cloud: roleRun(cloud),
-      fullstack: null,
-      embedded: null,
-      mechanical: null,
-      flight: null,
-      devices: null,
-      biodata: null,
-    },
+    roleStatus: roleStatus(tracks),
     standing: standing(row.band, row.percentile, row.counts, row.neighbors),
   };
 }
@@ -194,12 +180,7 @@ export const SAMPLE_HISTORY: ResumeVersion[] = [
   }),
 ];
 
-/**
- * Tailored résumés for the A/B lab while sample history is open.
- * They are a different pair from Jordan Hale and stay off the rating chart.
- * Overalls are close enough to tie. AI & ML and Cloud Ops are far enough
- * apart that the heavier side flips. Full-stack stays unrated.
- */
+/** Lab pair, separate from Jordan Hale and off the rating chart. Full-stack stays unrated. */
 const LAB_STANDING = {
   band: "1100–1250" as const,
   percentile: 0.72,
@@ -240,8 +221,7 @@ export const CLOUD_OPS_RESUME: ResumeVersion = sample({
 
 const SAMPLE_MODEL = "sample-elo";
 
-/** Both orders agree, because the probability comes only from the Elo gap. */
-function order(left: "a" | "b", pLeftStronger: number): OrderResult {
+function agreedOrder(left: "a" | "b", pLeftStronger: number): OrderResult {
   const right = 1 - pLeftStronger;
   return {
     left,
@@ -253,10 +233,7 @@ function order(left: "a" | "b", pLeftStronger: number): OrderResult {
   };
 }
 
-/**
- * Head-to-head from fixture scores. A 400-point gap is 10-to-1. Not a judge call.
- * Returns null when either side has no placed score for this role.
- */
+/** Head-to-head from fixture scores. A missing placed score returns null. Not a judge call. */
 export function compareSampleVersions(
   a: ResumeVersion,
   b: ResumeVersion,
@@ -279,16 +256,12 @@ export function compareSampleVersions(
     pB,
     eloA,
     eloB,
-    orders: [order("a", 1 - pB), order("b", pB)],
+    orders: [agreedOrder("a", 1 - pB), agreedOrder("b", pB)],
     categories,
   };
 }
 
-/**
- * Elo-gap comparison when both résumés are in `libraryIds` and already have
- * a placed score for this role. A missing role score returns null instead of
- * falling back to overall. Drafts stay out of `libraryIds`: their overall is a placeholder.
- */
+/** Stored Elo only. A missing role score stays missing. Drafts are not in `libraryIds`. */
 export function compareStoredScores(
   a: ResumeVersion,
   b: ResumeVersion,
