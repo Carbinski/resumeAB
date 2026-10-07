@@ -12,7 +12,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
       {reduce ? (
         children
       ) : (
-        <ReactLenis root options={{ lerp: 0.09, anchors: { offset: -88 } }}>
+        <ReactLenis root options={{ lerp: 0.09, anchors: true }}>
           {children}
         </ReactLenis>
       )}

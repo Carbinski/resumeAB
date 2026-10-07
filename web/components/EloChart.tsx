@@ -33,7 +33,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
 
   const compact = width < 520;
   const height = compact ? 290 : 380;
-  const m = { top: 24, right: compact ? 18 : 30, bottom: 52, left: compact ? 42 : 56 };
+  const m = { top: 24, right: compact ? 36 : 44, bottom: 52, left: compact ? 44 : 56 };
 
   const geometry = useMemo(() => {
     const times = versions.map((v) => new Date(v.uploadedAt).getTime());
@@ -42,7 +42,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
     const spanPad = t0 === t1 ? 86_400_000 * 7 : 0;
     const x = scaleTime()
       .domain([t0 - spanPad, t1 + spanPad])
-      .range([m.left + 16, width - m.right - 16]);
+      .range([m.left + 12, width - m.right - 12]);
 
     const values = versions.flatMap((v) => [scoreOf(v, role), v.ratings.overall]);
     const y = scaleLinear()
@@ -106,7 +106,9 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
     onActive(next.id);
   };
 
-  const tooltipLeft = Math.min(Math.max(ax, 118), width - 118);
+  const tipW = Math.min(220, Math.max(140, width - 16));
+  const tipHalf = tipW / 2;
+  const tooltipLeft = Math.min(Math.max(ax, tipHalf + 4), Math.max(tipHalf + 4, width - tipHalf - 4));
   const flip = ay < 150;
 
   return (
@@ -119,7 +121,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
         role="img"
         aria-label={`${ROLE_BY_ID[role].label} ELO across ${versions.length} resume versions. Currently ${scoreOf(active, role)} at ${active.label}.`}
         tabIndex={0}
-        className="touch-pan-y overflow-visible outline-offset-8"
+        className="touch-pan-y outline-offset-8"
         onPointerMove={(e) => nearest(e.clientX)}
         onPointerLeave={() => onActive(null)}
         onKeyDown={(e) => {
@@ -259,7 +261,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
                   isActive ? "fill-ink" : "fill-olive"
                 }`}
               >
-                {v.label}
+                {compact ? formatDate(v.uploadedAt) : v.label}
               </text>
               {!compact && (
                 <text
@@ -277,10 +279,11 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
       </svg>
 
       <motion.div
-          className="pointer-events-none absolute left-0 top-0 z-10 w-[220px]"
+          className="pointer-events-none absolute left-0 top-0 z-10 max-w-full"
+          style={{ width: tipW }}
           initial={false}
           animate={{
-            x: tooltipLeft - 110,
+            x: tooltipLeft - tipHalf,
             y: flip ? ay + 22 : ay - 22,
           }}
           transition={SPRING}
@@ -289,8 +292,8 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
             className="glass rounded-2xl px-3.5 py-3"
             style={{ transform: flip ? "none" : "translateY(-100%)" }}
           >
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="font-mono text-[0.7rem] text-olive">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <span className="min-w-0 font-mono text-[0.7rem] text-olive">
                 {active.label} · {formatDate(active.uploadedAt, "long")}
               </span>
               {delta != null ? (
@@ -306,7 +309,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
             <p className="font-display mt-0.5 text-[1.9rem] leading-none text-ink">
               {scoreOf(active, role)}
             </p>
-            <p className="mt-1.5 text-[0.74rem] leading-snug text-olive">{active.note}</p>
+            <p className="mt-1.5 text-[0.74rem] leading-snug text-olive [overflow-wrap:anywhere]">{active.note}</p>
           </div>
       </motion.div>
     </div>

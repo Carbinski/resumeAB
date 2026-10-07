@@ -51,7 +51,7 @@ const RUN_STEPS = [
   "Weighing six qualities",
 ];
 
-const SECTION = "mx-auto max-w-[1180px] scroll-mt-24 px-5 pb-24 sm:px-8 md:pb-32";
+const SECTION = "mx-auto max-w-[1180px] scroll-mt-28 px-5 pb-24 sm:px-8 md:pb-32";
 
 interface StripRow {
   id: TrackId;
@@ -106,7 +106,7 @@ function VersionChips({
     <div
       role="radiogroup"
       aria-label={label}
-      className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
+      className="flex min-w-0 flex-wrap gap-2"
     >
       {[...versions].reverse().map((v) => {
         const selected = v.id === selectedId;
@@ -213,7 +213,7 @@ function DraftDrop({
       }}
       className={cn(
         "rounded-[20px] border border-dashed px-5 transition-colors duration-300",
-        pending ? "py-4" : "flex h-[76px] items-center justify-between gap-4",
+        pending ? "py-4" : "flex min-h-[76px] flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3",
         over && !pending ? "border-clay bg-blush/40" : "border-bark/25 bg-cream/50",
       )}
     >
@@ -239,7 +239,7 @@ function DraftDrop({
       ) : (
         <>
           <div className="min-w-0">
-            <p className="truncate text-[0.95rem] text-ink">
+            <p className="text-[0.95rem] leading-snug text-ink">
               {over ? "Release to add as B" : "Drop the edited version"}
             </p>
             {error ? (
@@ -255,7 +255,7 @@ function DraftDrop({
           <button
             type="button"
             onClick={() => inputRef.current?.click()}
-            className="shrink-0 rounded-full border border-bark/20 px-4 py-2 text-[0.82rem] text-ink transition-colors hover:bg-white/70"
+            className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-bark/20 px-4 text-[0.82rem] text-ink transition-colors hover:bg-white/70"
           >
             Browse
           </button>
@@ -474,7 +474,7 @@ export function Lab() {
 
       <Reveal className="relative mt-12 overflow-hidden rounded-[36px] border border-bark/10 bg-gradient-to-b from-white/60 to-peach/40 p-5 sm:p-8 md:mt-16 md:p-10">
         <div className="grid gap-6 md:grid-cols-2 md:gap-8">
-          <div>
+          <div className="min-w-0">
             <p className="mb-3 text-[0.72rem] font-medium uppercase tracking-[0.18em] text-olive">
               A · Baseline
             </p>
@@ -488,7 +488,7 @@ export function Lab() {
               }}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="mb-3 text-[0.72rem] font-medium uppercase tracking-[0.18em] text-olive">
               B · Challenger
             </p>
@@ -502,7 +502,7 @@ export function Lab() {
                   reset();
                 }}
               />
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="shrink-0 text-[0.78rem] text-taupe">or</span>
                 <VersionChips
                   label="Challenger version"

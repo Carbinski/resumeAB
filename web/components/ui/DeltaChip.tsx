@@ -15,7 +15,7 @@ export function DeltaChip({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[0.72rem] tracking-tight",
+        "inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[0.72rem] tracking-tight",
         flat && "bg-stone text-olive",
         up && "bg-bark text-cream",
         !up && !flat && "bg-blush text-clay",
