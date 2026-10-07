@@ -3,14 +3,17 @@
 import { motion } from "motion/react";
 import { logout } from "@/lib/api";
 import { BRAND } from "@/lib/brand";
-import { Magnetic, buttonClass } from "./ui/Button";
 import { useLadder } from "./LadderProvider";
 
 const LINKS = [
+  { href: "#top", label: "About" },
   { href: "#rating", label: "Rating" },
   { href: "#roles", label: "Roles" },
   { href: "#lab", label: "A/B lab" },
 ];
+
+const itemClass =
+  "flex w-full items-center justify-center whitespace-nowrap rounded-full px-1 py-2 text-center text-[0.72rem] text-olive transition-colors hover:bg-white/70 hover:text-ink min-[400px]:text-[0.78rem] sm:px-2 sm:text-[0.84rem] md:text-[0.88rem]";
 
 export function Wordmark({ className }: { className?: string }) {
   return (
@@ -23,7 +26,7 @@ export function Wordmark({ className }: { className?: string }) {
 }
 
 export function Nav() {
-  const { pickFile, user, signOut } = useLadder();
+  const { user, signOut } = useLadder();
   const leave = async () => {
     await logout();
     signOut();
@@ -37,49 +40,27 @@ export function Nav() {
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
     >
-      <div className="glass flex w-full max-w-[640px] items-center justify-between gap-2 rounded-full py-1.5 pl-5 pr-1.5">
-        <a href="#top" className="text-[0.95rem] text-ink" aria-label={`${BRAND.name} home`}>
-          <Wordmark />
-        </a>
-        <ul className="hidden items-center gap-1 md:flex">
+      <div className="glass w-full max-w-[38rem] rounded-full px-1.5 py-1.5 sm:px-2">
+        <ul className="flex items-center gap-0.5 sm:gap-1">
           {LINKS.map((l) => (
-            <li key={l.href}>
-              <a
-                href={l.href}
-                className="rounded-full px-3.5 py-2 text-[0.85rem] text-olive transition-colors hover:bg-white/70 hover:text-ink"
-              >
+            <li key={l.href} className="flex min-w-0 flex-1">
+              <a href={l.href} className={itemClass}>
                 {l.label}
               </a>
             </li>
           ))}
+          <li className="flex min-w-0 flex-1">
+            {user ? (
+              <button type="button" onClick={() => void leave()} className={itemClass}>
+                Log out
+              </button>
+            ) : (
+              <a href="#account" className={itemClass}>
+                Sign in
+              </a>
+            )}
+          </li>
         </ul>
-        <div className="flex items-center gap-1">
-          {user ? (
-            <button
-              type="button"
-              onClick={() => void leave()}
-              className="hidden rounded-full px-3 py-2 text-[0.82rem] text-olive hover:text-ink sm:inline"
-            >
-              Log out
-            </button>
-          ) : (
-            <a
-              href="#account"
-              className="hidden rounded-full px-3 py-2 text-[0.82rem] text-olive hover:text-ink sm:inline"
-            >
-              Sign in
-            </a>
-          )}
-          <Magnetic strength={0.18}>
-            <button
-              type="button"
-              onClick={pickFile}
-              className={buttonClass("ink", "h-10 px-5 text-[0.85rem]")}
-            >
-              Upload resume
-            </button>
-          </Magnetic>
-        </div>
       </div>
     </motion.nav>
   );
