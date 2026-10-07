@@ -10,14 +10,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { getHistory, publishVersion, rateRole, uploadResume } from "@/lib/api";
+import { deleteVersion, getHistory, isSupportedResume, publishVersion, rateRole, uploadResume } from "@/lib/api";
 import { ACCEPTED_FORMATS } from "@/lib/brand";
+import { labelFromFileName } from "@/lib/labels";
 import type { RoleId } from "@/lib/roles";
 import type { Account, ResumeVersion } from "@/lib/types";
 
 export type UploadStatus =
   | { phase: "idle" }
-  | { phase: "processing"; fileName: string }
+  | { phase: "naming"; fileName: string; suggested: string }
+  | { phase: "processing"; fileName: string; label: string }
   | { phase: "done"; version: ResumeVersion; delta: number }
   | { phase: "error"; message: string };
 
@@ -30,8 +32,13 @@ interface LadderState {
   setRole: (role: RoleId) => void;
   setUser: (user: Account | null) => void;
   upload: UploadStatus;
-  /** Rates a file and appends it to the history. */
-  rateFile: (file: File) => Promise<ResumeVersion | null>;
+  /** Holds a chosen file and asks for a name before anything is stored. */
+  proposeFile: (file: File) => void;
+  /** Stores the pending file under the name the user confirmed. */
+  confirmName: (label: string) => Promise<ResumeVersion | null>;
+  cancelNaming: () => void;
+  /** Tombstones one resume and drops it from the history. */
+  removeVersion: (id: string) => Promise<void>;
   /** Publishes a lab draft onto the ladder. */
   addVersion: (version: ResumeVersion) => Promise<ResumeVersion | null>;
   resetUpload: () => void;
@@ -74,6 +81,8 @@ export function LadderProvider({
   const [role, setRole] = useState<RoleId>("overall");
   const [upload, setUpload] = useState<UploadStatus>({ phase: "idle" });
   const [roleRun, setRoleRun] = useState<RoleId | null>(null);
+  const pendingFile = useRef<File | null>(null);
+  const confirming = useRef(false);
 
   const current = history.length > 0 ? history[history.length - 1] : null;
 
@@ -116,16 +125,43 @@ export function LadderProvider({
     return false;
   }, [user]);
 
-  const rateFile = useCallback(
-    async (file: File) => {
+  const proposeFile = useCallback(
+    (file: File) => {
+      if (!requireAccount()) return;
+      if (upload.phase === "processing") return;
+      if (!isSupportedResume(file.name)) {
+        pendingFile.current = null;
+        setUpload({
+          phase: "error",
+          message: `Unsupported file type. Use ${ACCEPTED_FORMATS.join(", ")}.`,
+        });
+        return;
+      }
+      pendingFile.current = file;
+      setUpload({
+        phase: "naming",
+        fileName: file.name,
+        suggested: labelFromFileName(file.name),
+      });
+    },
+    [requireAccount, upload.phase],
+  );
+
+  const confirmName = useCallback(
+    async (label: string) => {
+      const file = pendingFile.current;
+      const name = label.trim();
+      if (!file || !name || confirming.current) return null;
       if (!requireAccount()) return null;
-      setUpload({ phase: "processing", fileName: file.name });
+      confirming.current = true;
+      setUpload({ phase: "processing", fileName: file.name, label: name });
       const baseline = current;
       try {
         const version = await uploadResume(file, {
           baseline: baseline ?? undefined,
-          label: `v${history.length + 1}`,
+          label: name,
         });
+        pendingFile.current = null;
         setHistory((items) =>
           items.some((item) => item.id === version.id) ? items : [...items, version],
         );
@@ -136,15 +172,36 @@ export function LadderProvider({
         });
         return version;
       } catch (error) {
+        pendingFile.current = null;
         setUpload({
           phase: "error",
           message: error instanceof Error ? error.message : "Something went wrong.",
         });
+        try {
+          setHistory(await getHistory());
+        } catch {
+          // The dropzone already shows the upload error.
+        }
         return null;
+      } finally {
+        confirming.current = false;
       }
     },
-    [current, history.length, requireAccount],
+    [current, requireAccount],
   );
+
+  const cancelNaming = useCallback(() => {
+    pendingFile.current = null;
+    setUpload({ phase: "idle" });
+  }, []);
+
+  const removeVersion = useCallback(async (id: string) => {
+    await deleteVersion(id);
+    setHistory((items) => items.filter((item) => item.id !== id));
+    setUpload((state) =>
+      state.phase === "done" && state.version.id === id ? { phase: "idle" } : state,
+    );
+  }, []);
 
   const addVersion = useCallback(async (version: ResumeVersion) => {
     try {
@@ -184,8 +241,12 @@ export function LadderProvider({
     [current],
   );
 
-  const resetUpload = useCallback(() => setUpload({ phase: "idle" }), []);
+  const resetUpload = useCallback(() => {
+    pendingFile.current = null;
+    setUpload({ phase: "idle" });
+  }, []);
   const signOut = useCallback(() => {
+    pendingFile.current = null;
     setUser(null);
     setHistory([]);
     setUpload({ phase: "idle" });
@@ -207,7 +268,10 @@ export function LadderProvider({
       setRole,
       setUser,
       upload,
-      rateFile,
+      proposeFile,
+      confirmName,
+      cancelNaming,
+      removeVersion,
       addVersion,
       resetUpload,
       pickFile,
@@ -223,7 +287,10 @@ export function LadderProvider({
       offline,
       role,
       upload,
-      rateFile,
+      proposeFile,
+      confirmName,
+      cancelNaming,
+      removeVersion,
       addVersion,
       resetUpload,
       pickFile,
@@ -245,7 +312,7 @@ export function LadderProvider({
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
-          if (file) void rateFile(file);
+          if (file) proposeFile(file);
         }}
       />
     </Ctx.Provider>

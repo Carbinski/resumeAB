@@ -204,6 +204,84 @@ def test_login_and_private_versions(tmp_path: Path):
     assert hidden.status_code == 404
 
 
+def test_named_upload_and_delete_one_resume(tmp_path: Path):
+    client, _judge, store = _client(tmp_path)
+    _signup(client, "ada@example.test", "Northwind")
+
+    named = client.post(
+        "/versions",
+        files={"file": ("summer-intern.txt", RESUME.encode(), "text/plain")},
+        data={"label": "Summer intern", "draft": "false"},
+    )
+    assert named.status_code == 200, named.text
+    body = named.json()
+    assert body["label"] == "Summer intern"
+    resume_id = body["id"]
+    stored = store.get_resume(resume_id)
+    assert stored is not None and stored.file_path is not None
+    blob = Path(stored.file_path)
+    digest = stored.content_sha256
+    matches = store._conn.execute(
+        "SELECT COUNT(*) AS n FROM matches WHERE left_sha = ? OR right_sha = ?",
+        (digest, digest),
+    ).fetchone()["n"]
+    assert matches > 0
+
+    stranger = TestClient(client.app)
+    assert stranger.delete(f"/versions/{resume_id}").status_code == 401
+    _signup(stranger, "grace@example.test", "Harbor")
+    assert stranger.delete(f"/versions/{resume_id}").status_code == 404
+    assert client.delete("/versions/anchor-intern-0").status_code == 404
+    anchor = store.get_resume("anchor-intern-0")
+    assert anchor is not None and anchor.redacted_text
+
+    deleted = client.delete(f"/versions/{resume_id}")
+    assert deleted.status_code == 200
+    assert deleted.json() == {"ok": True}
+    assert client.get("/versions").json() == []
+    me = client.get("/me")
+    assert me.status_code == 200
+    assert me.json()["email"] == "ada@example.test"
+
+    gone = store.get_resume(resume_id)
+    assert gone is not None
+    assert gone.tombstoned
+    assert gone.redacted_text is None
+    assert gone.file_path is None
+    assert gone.content_sha256 == digest
+    assert not blob.exists()
+    still = store._conn.execute(
+        "SELECT COUNT(*) AS n FROM matches WHERE left_sha = ? OR right_sha = ?",
+        (digest, digest),
+    ).fetchone()["n"]
+    assert still == matches
+
+    draft = client.post(
+        "/versions",
+        files={"file": ("campus-rewrite.txt", SECOND.encode(), "text/plain")},
+        data={"label": "Campus rewrite", "draft": "true"},
+    )
+    assert draft.status_code == 200, draft.text
+    assert draft.json()["label"] == "Campus rewrite"
+    assert client.get("/versions").json() == []
+    published = client.post(f"/versions/{draft.json()['id']}/publish")
+    assert published.status_code == 200, published.text
+    assert published.json()["label"] == "Campus rewrite"
+    assert [item["label"] for item in client.get("/versions").json()] == ["Campus rewrite"]
+
+    longer = RESUME.replace(
+        "Software engineer intern",
+        "Software engineer intern\n- Kept a lab notebook for the ranking study.\n",
+    )
+    capped = client.post(
+        "/versions",
+        files={"file": ("long-name.txt", longer.encode(), "text/plain")},
+        data={"label": "L" * 90, "draft": "false"},
+    )
+    assert capped.status_code == 200, capped.text
+    assert capped.json()["label"] == "L" * 80
+
+
 def test_overflow_keeps_the_rating_and_drops_the_oldest_file(tmp_path: Path):
     store = Store(tmp_path / "ladder.db", tmp_path / "blobs")
     user = store.create_user(
