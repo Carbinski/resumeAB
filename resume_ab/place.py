@@ -246,11 +246,9 @@ def _elo_after(base: float, probability: float) -> float:
     return base + 400 * math.log10(clipped / (1 - clipped))
 
 
-def _safe_message(error: Exception, text: str | None) -> str:
-    message = str(error).strip() or "The judge could not score this résumé."
-    if text and len(text) >= 24 and text[:24] in message:
-        return "The judge could not score this résumé."
-    return message[:240]
+def _safe_message(_error: Exception, _text: str | None) -> str:
+    """Client-visible placement errors stay generic so résumé text cannot leak."""
+    return "The judge could not score this résumé."
 
 
 def _dump_result(result: CompareResult) -> str:

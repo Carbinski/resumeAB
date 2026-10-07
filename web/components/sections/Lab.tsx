@@ -109,6 +109,10 @@ function DraftDrop({
 
   const confirm = async (label: string) => {
     if (!pending || busy) return;
+    if (demo) {
+      setError("Leave sample history before uploading.");
+      return;
+    }
     const name = label.trim();
     if (!name) return;
     setError(null);
@@ -303,7 +307,7 @@ export function Lab() {
   };
 
   const keep = async () => {
-    if (!result) return;
+    if (demo || !result) return;
     const published = await addVersion(result.b);
     if (!published) return;
     setB(published);

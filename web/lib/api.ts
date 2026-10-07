@@ -15,7 +15,16 @@ export function isSupportedResume(fileName: string): boolean {
   return ACCEPTED_FORMATS.some((ext) => lower.endsWith(ext));
 }
 
+function sampleHistoryIsOpen(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("demo") === "1";
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD" && sampleHistoryIsOpen()) {
+    throw new Error("Leave sample history before changing anything.");
+  }
   const response = await fetch(`/api/ladder${path}`, {
     ...init,
     credentials: "include",
