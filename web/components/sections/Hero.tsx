@@ -32,10 +32,14 @@ const CATEGORY_ANGLES = [-150, -90, -30, 30, 90, 150];
 const ROLE_ANGLES = [-176, -8, 56];
 const MARKETING_TRACKS: readonly RoleId[] = ["ai", "cloud", "fullstack"];
 
-function ladderSentence(user: Account): string {
-  const parts = [levelLabel(user.level), industryLabel(user.industry)];
-  if (user.company) parts.push(user.company);
-  const peers = user.level === "newgrad" ? "new grads" : "interns";
+function ladderSentence(source: {
+  level: string;
+  industry: string;
+  company: string | null;
+}): string {
+  const parts = [levelLabel(source.level), industryLabel(source.industry)];
+  if (source.company) parts.push(source.company);
+  const peers = source.level === "newgrad" ? "new grads" : "interns";
   return `${parts.join(" · ")}. Your score is against other ${peers}.`;
 }
 
@@ -261,7 +265,8 @@ function OrbitStage({ dragging }: { dragging: boolean }) {
 }
 
 export function Hero() {
-  const { proposeFile, pickFile, demo, enterDemo, exitDemo, user, hasLiveVersion } = useLadder();
+  const { proposeFile, pickFile, demo, enterDemo, exitDemo, user, hasLiveVersion, current } =
+    useLadder();
   const dragging = useWindowFileDrop((file) => proposeFile(file));
   const signedIn = !!user && !demo;
   const showRating = signedIn && hasLiveVersion;
@@ -308,7 +313,7 @@ export function Hero() {
           className="mx-auto mt-7 max-w-[34rem] text-[1.05rem] leading-relaxed text-olive"
         >
           {signedIn && user
-            ? ladderSentence(user)
+            ? ladderSentence(current ?? user)
             : `${BRAND.name} rates your resume the way a hiring panel would: against others, one matchup at a time. Watch your ELO move with every edit, then test the next change before you send it.`}
         </motion.p>
 

@@ -5,12 +5,12 @@ import { area, curveMonotoneX, line } from "d3-shape";
 import { motion, useInView } from "motion/react";
 import { useId, useMemo, useRef } from "react";
 import { ELO_CENTER, formatDelta } from "@/lib/elo";
-import { formatDate } from "@/lib/ratings";
+import { formatDate, placedRoleScore } from "@/lib/ratings";
 import { ROLE_BY_ID, type RoleId } from "@/lib/roles";
 import type { ResumeVersion } from "@/lib/types";
 
-function scoreOf(version: ResumeVersion, role: RoleId): number {
-  return version.ratings[role] ?? version.ratings.overall;
+function scoreOf(version: ResumeVersion, role: RoleId): number | null {
+  return placedRoleScore(version, role);
 }
 import { useElementWidth } from "@/lib/useElementWidth";
 import { EASE } from "./ui/Reveal";
@@ -35,8 +35,14 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
   const height = compact ? 290 : 380;
   const m = { top: 24, right: compact ? 18 : 30, bottom: 52, left: compact ? 42 : 56 };
 
+  const plotted = useMemo(
+    () => versions.filter((version) => scoreOf(version, role) != null),
+    [versions, role],
+  );
+
   const geometry = useMemo(() => {
-    const times = versions.map((v) => new Date(v.uploadedAt).getTime());
+    if (plotted.length === 0) return null;
+    const times = plotted.map((v) => new Date(v.uploadedAt).getTime());
     const t0 = Math.min(...times);
     const t1 = Math.max(...times);
     const spanPad = t0 === t1 ? 86_400_000 * 7 : 0;
@@ -44,43 +50,51 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
       .domain([t0 - spanPad, t1 + spanPad])
       .range([m.left + 16, width - m.right - 16]);
 
-    const values = versions.flatMap((v) => [scoreOf(v, role), v.ratings.overall]);
+    const values = plotted.flatMap((v) => [scoreOf(v, role) as number, v.ratings.overall]);
     const y = scaleLinear()
       .domain([Math.min(...values) - 28, Math.max(...values) + 28])
       .nice(4)
       .range([height - m.bottom, m.top]);
 
     const px = (v: ResumeVersion) => x(new Date(v.uploadedAt));
+    const yRole = (v: ResumeVersion) => y(scoreOf(v, role) as number);
     const roleLine =
       line<ResumeVersion>()
         .x(px)
-        .y((v) => y(scoreOf(v, role)))
-        .curve(curveMonotoneX)(versions) ?? "";
+        .y(yRole)
+        .curve(curveMonotoneX)(plotted) ?? "";
     const overallLine =
       line<ResumeVersion>()
         .x(px)
         .y((v) => y(v.ratings.overall))
-        .curve(curveMonotoneX)(versions) ?? "";
+        .curve(curveMonotoneX)(plotted) ?? "";
     const roleArea =
       area<ResumeVersion>()
         .x(px)
         .y0(height - m.bottom)
-        .y1((v) => y(scoreOf(v, role)))
-        .curve(curveMonotoneX)(versions) ?? "";
+        .y1(yRole)
+        .curve(curveMonotoneX)(plotted) ?? "";
 
     return { x, y, px, roleLine, overallLine, roleArea };
-  }, [versions, role, width, height, m.left, m.right, m.top, m.bottom]);
+  }, [plotted, role, width, height, m.left, m.right, m.top, m.bottom]);
+
+  if (!geometry) {
+    return <div ref={wrapRef} className="relative" style={{ height }} />;
+  }
 
   const { y, px, roleLine, overallLine, roleArea } = geometry;
   const showOverallRef = role !== "overall";
-  const active = versions.find((v) => v.id === activeId) ?? versions[versions.length - 1];
+  const active = plotted.find((v) => v.id === activeId) ?? plotted[plotted.length - 1];
+  const activeScore = active ? scoreOf(active, role) : null;
+  if (!active || activeScore == null) {
+    return <div ref={wrapRef} className="relative" style={{ height }} />;
+  }
   const activeIndex = history.findIndex((v) => v.id === active.id);
   const before = activeIndex > 0 ? history[activeIndex - 1] : undefined;
   const ax = px(active);
-  const ay = y(scoreOf(active, role));
-  const beforeScore = before ? before.ratings[role] : null;
-  const activeScore = active.ratings[role];
-  const delta = beforeScore != null && activeScore != null ? activeScore - beforeScore : null;
+  const ay = y(activeScore);
+  const beforeScore = before ? placedRoleScore(before, role) : null;
+  const delta = beforeScore != null ? activeScore - beforeScore : null;
   const ticks = y.ticks(4);
   const showCenter = ELO_CENTER > y.domain()[0] && ELO_CENTER < y.domain()[1];
 
@@ -88,22 +102,22 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return;
     const cursor = clientX - rect.left;
-    let best = versions[0];
+    let best = plotted[0];
     let bestDistance = Infinity;
-    for (const v of versions) {
+    for (const v of plotted) {
       const d = Math.abs(px(v) - cursor);
       if (d < bestDistance) {
         best = v;
         bestDistance = d;
       }
     }
-    onActive(best.id);
+    if (best) onActive(best.id);
   };
 
   const step = (dir: 1 | -1) => {
-    const i = versions.findIndex((v) => v.id === active.id);
-    const next = versions[Math.min(versions.length - 1, Math.max(0, i + dir))];
-    onActive(next.id);
+    const i = plotted.findIndex((v) => v.id === active.id);
+    const next = plotted[Math.min(plotted.length - 1, Math.max(0, i + dir))];
+    if (next) onActive(next.id);
   };
 
   const tooltipLeft = Math.min(Math.max(ax, 118), width - 118);
@@ -117,7 +131,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         role="img"
-        aria-label={`${ROLE_BY_ID[role].label} ELO across ${versions.length} resume versions. Currently ${scoreOf(active, role)} at ${active.label}.`}
+        aria-label={`${ROLE_BY_ID[role].label} ELO across ${plotted.length} resume versions. Currently ${activeScore} at ${active.label}.`}
         tabIndex={0}
         className="touch-pan-y overflow-visible outline-offset-8"
         onPointerMove={(e) => nearest(e.clientX)}
@@ -230,8 +244,9 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
           transition={SPRING}
         />
 
-        {versions.map((v, i) => {
+        {plotted.map((v, i) => {
           const isActive = v.id === active.id;
+          const score = scoreOf(v, role) as number;
           return (
             <g key={v.id}>
               <motion.circle
@@ -239,11 +254,11 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
                 fill={isActive ? "#BC7767" : "#F7F6F5"}
                 stroke="#2A221C"
                 strokeWidth={isActive ? 0 : 1.8}
-                initial={{ opacity: 0, cx: px(v), cy: y(scoreOf(v, role)) }}
+                initial={{ opacity: 0, cx: px(v), cy: y(score) }}
                 animate={{
                   opacity: inView ? 1 : 0,
                   cx: px(v),
-                  cy: y(scoreOf(v, role)),
+                  cy: y(score),
                 }}
                 transition={{
                   opacity: { duration: 0.5, delay: 0.5 + i * 0.16 },
@@ -304,7 +319,7 @@ export function EloChart({ versions, history, role, activeId, onActive }: Props)
               ) : null}
             </div>
             <p className="font-display mt-0.5 text-[1.9rem] leading-none text-ink">
-              {scoreOf(active, role)}
+              {activeScore}
             </p>
             <p className="mt-1.5 text-[0.74rem] leading-snug text-olive">{active.note}</p>
           </div>
