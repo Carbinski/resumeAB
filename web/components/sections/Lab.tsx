@@ -341,6 +341,11 @@ export function Lab() {
     setError(null);
     frameStage();
     if (demo) {
+      if (a.ratings[role] == null || challenger.ratings[role] == null) {
+        setError("This role has not been rated on both resumes.");
+        setPhase("setup");
+        return;
+      }
       setResult(compareSampleVersions(a, challenger, role));
       setPhase("result");
       return;
@@ -370,6 +375,10 @@ export function Lab() {
     reset();
   };
 
+  const roleUnrated =
+    !!challenger &&
+    challenger.id !== a.id &&
+    (a.ratings[role] == null || challenger.ratings[role] == null);
   const hint = drafting
     ? "Rating your edit…"
     : !challenger
@@ -378,9 +387,11 @@ export function Lab() {
         : "Choose a baseline, then add the version you changed."
       : challenger.id === a.id
         ? "Pick two different versions to compare."
-        : demo
-          ? "Ready. This uses the saved scores, not a live rating."
-          : "Ready. Weigh A against B.";
+        : roleUnrated && demo
+          ? "This role has not been rated on both resumes."
+          : demo
+            ? "Ready. This uses the saved scores, not a live rating."
+            : "Ready. Weigh A against B.";
 
   return (
     <section id="lab" className={SECTION}>
@@ -479,7 +490,7 @@ export function Lab() {
           </div>
 
           <div className="mt-4 flex flex-col items-center gap-5">
-            {storedResult ? null : (
+            {storedResult || (demo && roleUnrated) ? null : (
               <Magnetic>
                 <Button className="h-12 min-w-[12rem] px-8" disabled={!ready || shownPhase === "running"} onClick={run}>
                   {shownPhase === "running" ? "Weighing…" : shownPhase === "result" ? "Run it again" : "Run comparison"}
