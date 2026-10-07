@@ -12,6 +12,7 @@ from pathlib import Path
 
 log = logging.getLogger("resume_ab.text")
 log.setLevel(logging.INFO)
+log.propagate = False
 
 
 def log_resume_text(*, stage: str, filename: str, text: str, resume_id: str | None = None) -> None:
@@ -31,16 +32,20 @@ def log_resume_text(*, stage: str, filename: str, text: str, resume_id: str | No
 
 
 def configure_text_log(data_dir: Path) -> Path:
-    """Append the same text log to ``data_dir/logs/resume-text.log`` and stderr."""
+    """Append résumé text to ``data_dir/logs/resume-text.log`` only.
+
+    The file is mode 600. Records do not propagate to the process output, so a
+    shared log stream cannot hand the unredacted text to a client.
+    """
     path = data_dir / "logs" / "resume-text.log"
     path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch(exist_ok=True)
+    path.chmod(0o600)
+    log.propagate = False
+    log.handlers = [handler for handler in log.handlers if type(handler) is not logging.StreamHandler]
     resolved = str(path.resolve())
     if not any(getattr(handler, "baseFilename", None) == resolved for handler in log.handlers):
         file_handler = logging.FileHandler(path, encoding="utf-8")
         file_handler.setFormatter(logging.Formatter("%(message)s\n"))
         log.addHandler(file_handler)
-    if not any(type(handler) is logging.StreamHandler for handler in log.handlers):
-        stream = logging.StreamHandler()
-        stream.setFormatter(logging.Formatter("%(message)s"))
-        log.addHandler(stream)
     return path

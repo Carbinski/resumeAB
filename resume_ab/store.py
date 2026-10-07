@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -106,44 +108,149 @@ CREATE TABLE IF NOT EXISTS comparisons (
 
 
 _LABEL_LIMIT = 80
+_NOTE_LIMIT = 500
+_FILE_NAME_LIMIT = 120
+_MAX_PASSWORD_CHARS = 200
+_SCRYPT_N = 2**14
+_SCRYPT_R = 8
+_SCRYPT_P = 1
 _DRAFT_LABEL = "Draft"
+_ALLOWED_SUFFIXES = {".txt", ".pdf", ".docx", ".tex"}
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_BLOB_NAME = re.compile(r"[A-Za-z0-9._-]{1,80}")
+_DUMMY_PASSWORD_HASH: str | None = None
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def strip_controls(value: str) -> str:
+    """Drop NUL and other control characters so a field cannot break a log or header."""
+    return _CONTROL.sub("", value).strip()
+
+
 def _clean_label(label: str | None) -> str | None:
     """A user-supplied name, stripped and capped. Blank is not a name."""
     if label is None:
         return None
-    cleaned = label.strip()[:_LABEL_LIMIT]
+    cleaned = strip_controls(label)[:_LABEL_LIMIT]
     return cleaned or None
 
 
+def _clean_note(note: str | None) -> str:
+    if not note:
+        return ""
+    return strip_controls(note)[:_NOTE_LIMIT]
+
+
+def _clean_file_name(name: str | None) -> str:
+    base = (name or "resume.txt").replace("\\", "/").split("/")[-1]
+    base = strip_controls(base).strip().strip(".")
+    if not base or base in {".", ".."}:
+        return "resume.txt"
+    return base[:_FILE_NAME_LIMIT]
+
+
+def _password_bytes(password: str) -> bytes | None:
+    if not isinstance(password, str) or not password or len(password) > _MAX_PASSWORD_CHARS:
+        return None
+    try:
+        encoded = password.encode("utf-8")
+    except UnicodeError:
+        return None
+    if len(encoded) > 1024:
+        return None
+    return encoded
+
+
 def hash_password(password: str) -> str:
+    encoded = _password_bytes(password)
+    if encoded is None or len(password) < 8:
+        raise ValueError("password length")
     salt = secrets.token_bytes(16)
-    n, r, p = 2**14, 8, 1
-    digest = hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=p, dklen=32)
-    return f"scrypt${n}${r}${p}${salt.hex()}${digest.hex()}"
+    digest = hashlib.scrypt(
+        encoded,
+        salt=salt,
+        n=_SCRYPT_N,
+        r=_SCRYPT_R,
+        p=_SCRYPT_P,
+        dklen=32,
+    )
+    return f"scrypt${_SCRYPT_N}${_SCRYPT_R}${_SCRYPT_P}${salt.hex()}${digest.hex()}"
+
+
+def _dummy_password_hash() -> str:
+    global _DUMMY_PASSWORD_HASH
+    if _DUMMY_PASSWORD_HASH is None:
+        _DUMMY_PASSWORD_HASH = hash_password("dummy-password-value")
+    return _DUMMY_PASSWORD_HASH
+
+
+def _session_digest(raw: str) -> str | None:
+    if not isinstance(raw, str) or not raw or len(raw) > 128:
+        return None
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 def verify_password(password: str, stored: str) -> bool:
+    encoded = _password_bytes(password)
+    if encoded is None:
+        return False
     try:
         scheme, n, r, p, salt, digest = stored.split("$")
         if scheme != "scrypt":
             return False
+        n_i, r_i, p_i = int(n), int(r), int(p)
+        if (n_i, r_i, p_i) != (_SCRYPT_N, _SCRYPT_R, _SCRYPT_P):
+            return False
+        if len(salt) != 32 or len(digest) != 64:
+            return False
         check = hashlib.scrypt(
-            password.encode(),
+            encoded,
             salt=bytes.fromhex(salt),
-            n=int(n),
-            r=int(r),
-            p=int(p),
+            n=n_i,
+            r=r_i,
+            p=p_i,
             dklen=32,
         )
-        return hmac.compare_digest(check.hex(), digest)
+        return hmac.compare_digest(check, bytes.fromhex(digest))
     except (ValueError, TypeError):
         return False
+
+
+def write_contained(root: Path, name: str, data: bytes) -> Path:
+    """Write ``data`` as ``name`` inside ``root``. ``name`` is one path segment."""
+    if not _BLOB_NAME.fullmatch(name):
+        raise ValueError("name")
+    root.mkdir(parents=True, exist_ok=True)
+    base = root.resolve()
+    blob = (base / name).resolve()
+    if blob.parent != base:
+        raise ValueError("path")
+    _write_private(blob, data)
+    return blob
+
+
+def _write_private(blob: Path, data: bytes) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(blob, flags, 0o600)
+    try:
+        view = memoryview(data)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise OSError("short write")
+            view = view[written:]
+        os.fchmod(fd, 0o600)
+    except Exception:
+        os.close(fd)
+        blob.unlink(missing_ok=True)
+        raise
+    else:
+        os.close(fd)
 
 
 @dataclass
@@ -346,12 +453,16 @@ class Store:
             return _user(row)
 
     def authenticate(self, email: str, password: str) -> User | None:
+        if _password_bytes(password) is None:
+            verify_password("dummy-password-value", _dummy_password_hash())
+            return None
         with self._lock:
             row = self._conn.execute(
                 "SELECT * FROM users WHERE email = ? AND deleted_at IS NULL",
-                (email.lower(),),
+                (email.strip().lower(),),
             ).fetchone()
-            if row is None or not verify_password(password, row["password_hash"]):
+            stored = row["password_hash"] if row else _dummy_password_hash()
+            if row is None or not verify_password(password, stored):
                 return None
             return _user(row)
 
@@ -396,7 +507,9 @@ class Store:
         return raw
 
     def user_for_token(self, raw: str) -> User | None:
-        digest = hashlib.sha256(raw.encode()).hexdigest()
+        digest = _session_digest(raw)
+        if digest is None:
+            return None
         with self._lock:
             row = self._conn.execute(
                 """
@@ -409,7 +522,9 @@ class Store:
             return _user(row) if row else None
 
     def delete_session(self, raw: str) -> None:
-        digest = hashlib.sha256(raw.encode()).hexdigest()
+        digest = _session_digest(raw)
+        if digest is None:
+            return
         with self._lock:
             self._conn.execute("DELETE FROM sessions WHERE token_hash = ?", (digest,))
             self._conn.commit()
@@ -426,7 +541,7 @@ class Store:
                     """
                     UPDATE resumes
                     SET redacted_text = NULL, file_path = NULL, purged = 1, tombstoned = 1,
-                        company = NULL, file_name = NULL, note = ''
+                        company = NULL, file_name = NULL, note = '', label = NULL
                     WHERE id = ?
                     """,
                     (row["id"],),
@@ -438,7 +553,7 @@ class Store:
                 SET email = ?, name_on_resume = '', company = NULL, deleted_at = ?, password_hash = ?
                 WHERE id = ?
                 """,
-                (f"deleted-{user_id}@invalid", _now(), hash_password(secrets.token_urlsafe(16)), user_id),
+                (f"deleted-{user_id}@invalid", _now(), "scrypt$deleted", user_id),
             )
             self._conn.commit()
 
@@ -462,6 +577,8 @@ class Store:
         """
         digest = content_sha256(redacted_text)
         provided = _clean_label(label)
+        note = _clean_note(note)
+        file_name = _clean_file_name(file_name)
         with self._lock:
             existing = self._conn.execute(
                 """
@@ -483,8 +600,8 @@ class Store:
                 return resume, False
 
             resume_id = uuid.uuid4().hex
-            blob = self.blob_dir / f"{resume_id}{suffix}"
-            blob.write_bytes(file_bytes)
+            blob = self._blob_for(resume_id, suffix)
+            _write_private(blob, file_bytes)
             if provided:
                 stored_label = provided
             elif published:
@@ -523,7 +640,10 @@ class Store:
     def publish(self, user_id: str, resume_id: str) -> Resume | None:
         with self._lock:
             row = self._conn.execute(
-                "SELECT * FROM resumes WHERE id = ? AND user_id = ? AND tombstoned = 0",
+                """
+                SELECT * FROM resumes
+                WHERE id = ? AND user_id = ? AND tombstoned = 0 AND is_synthetic = 0
+                """,
                 (resume_id, user_id),
             ).fetchone()
             if row is None:
@@ -557,7 +677,7 @@ class Store:
                 """
                 UPDATE resumes
                 SET redacted_text = NULL, file_path = NULL, purged = 1, tombstoned = 1,
-                    company = NULL, file_name = NULL, note = ''
+                    company = NULL, file_name = NULL, note = '', label = NULL
                 WHERE id = ? AND user_id = ? AND is_synthetic = 0
                 """,
                 (resume_id, user_id),
@@ -826,12 +946,33 @@ class Store:
                 (row["id"],),
             )
 
+    def _blob_for(self, resume_id: str, suffix: str) -> Path:
+        if not re.fullmatch(r"[0-9a-f]{32}", resume_id):
+            raise ValueError("resume id")
+        normalized = (suffix or "").lower()
+        if normalized not in _ALLOWED_SUFFIXES:
+            raise ValueError("suffix")
+        root = self.blob_dir.resolve()
+        blob = (root / f"{resume_id}{normalized}").resolve()
+        if blob.parent != root:
+            raise ValueError("path")
+        return blob
+
     def _unlink(self, path: str | None) -> None:
         if not path:
             return
-        blob = Path(path)
+        root = self.blob_dir.resolve()
+        candidate = Path(path)
+        if not candidate.is_absolute():
+            candidate = root / candidate
         try:
-            blob.resolve().relative_to(self.blob_dir.resolve())
-        except ValueError:
+            parent = candidate.parent.resolve()
+            parent.relative_to(root)
+        except (OSError, ValueError):
             return
-        blob.unlink(missing_ok=True)
+        if parent != root and root not in parent.parents:
+            return
+        try:
+            candidate.unlink(missing_ok=True)
+        except OSError:
+            return

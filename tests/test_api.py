@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import pytest
@@ -69,6 +70,8 @@ def _signup(client: TestClient, email: str, company: str, industry: str = "softw
 
 def test_upload_redacts_before_the_judge_and_stays_under_the_match_budget(tmp_path: Path, caplog):
     caplog.set_level("INFO", logger="resume_ab.text")
+    text_log = logging.getLogger("resume_ab.text")
+    text_log.addHandler(caplog.handler)
     client, judge, store = _client(tmp_path)
     _signup(client, "ada@example.test", "Northwind")
 
@@ -103,10 +106,13 @@ def test_upload_redacts_before_the_judge_and_stays_under_the_match_budget(tmp_pa
     assert stored is not None
     assert stored.redacted_text is not None
     assert "ada.lovelace@example.test" not in stored.redacted_text
-    assert "extracted" in caplog.text
-    redacted_log = caplog.text.split("redacted", 1)[1]
-    assert "ada.lovelace@example.test" not in redacted_log
-    assert "Northwind Labs" in redacted_log
+    try:
+        assert "extracted" in caplog.text
+        redacted_log = caplog.text.split("redacted", 1)[1]
+        assert "ada.lovelace@example.test" not in redacted_log
+        assert "Northwind Labs" in redacted_log
+    finally:
+        text_log.removeHandler(caplog.handler)
 
 
 def test_first_version_scores_categories_and_the_second_moves_them(tmp_path: Path):

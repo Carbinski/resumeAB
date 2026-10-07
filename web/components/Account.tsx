@@ -216,7 +216,13 @@ export function Account() {
               <button
                 type="button"
                 className="text-[0.85rem] text-olive underline decoration-bark/25 underline-offset-4"
-                onClick={() => void logout().then(() => signOut())}
+                onClick={() => {
+                  if (demo) {
+                    setError("Leave sample history before logging out.");
+                    return;
+                  }
+                  void logout().then(() => signOut());
+                }}
               >
                 Log out
               </button>
