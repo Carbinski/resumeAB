@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { industryLabel, levelLabel } from "@/lib/cohort";
+import { placedRoleScore } from "@/lib/ratings";
 import { ROLE_BY_ID, visibleRoleIds } from "@/lib/roles";
 import { Anatomy } from "../Anatomy";
 import { EloChart } from "../EloChart";
@@ -44,7 +45,7 @@ export function Rating() {
     return inRange.length >= 2 ? inRange : history.slice(-2);
   }, [history, range]);
 
-  const chartVersions = versions.filter((version) => version.ratings[role] != null);
+  const chartVersions = versions.filter((version) => placedRoleScore(version, role) != null);
   if (history.length === 0) {
     return (
       <section id="rating" className="mx-auto max-w-[1180px] scroll-mt-24 px-5 py-20 sm:px-8 md:py-28">
@@ -129,7 +130,7 @@ export function Rating() {
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-clay" />
                     {ROLE_BY_ID[role].label}:{" "}
-                    <span className="font-mono text-ink">{active.ratings[role] ?? "—"}</span>
+                    <span className="font-mono text-ink">{placedRoleScore(active, role) ?? "—"}</span>
                   </motion.p>
                 ) : (
                   <motion.p

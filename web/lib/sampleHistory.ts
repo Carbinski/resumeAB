@@ -1,6 +1,6 @@
 import { CATEGORIES, type CategoryId } from "./categories";
 import { winProbability } from "./elo";
-import { categoryElo } from "./ratings";
+import { categoryElo, placedRoleScore } from "./ratings";
 import type { RoleId } from "./roles";
 import type {
   CategoryDuel,
@@ -253,14 +253,18 @@ function order(left: "a" | "b", pLeftStronger: number): OrderResult {
   };
 }
 
-/** Head-to-head from fixture scores. A 400-point gap is 10-to-1. Not a judge call. */
+/**
+ * Head-to-head from fixture scores. A 400-point gap is 10-to-1. Not a judge call.
+ * Returns null when either side has no placed score for this role.
+ */
 export function compareSampleVersions(
   a: ResumeVersion,
   b: ResumeVersion,
   role: RoleId,
-): CompareResult {
-  const eloA = a.ratings[role] ?? a.ratings.overall;
-  const eloB = b.ratings[role] ?? b.ratings.overall;
+): CompareResult | null {
+  const eloA = placedRoleScore(a, role);
+  const eloB = placedRoleScore(b, role);
+  if (eloA == null || eloB == null) return null;
   const pB = winProbability(eloB, eloA);
   const categories: CategoryDuel[] = CATEGORIES.flatMap((def) => {
     const catA = categoryElo(a, def.id, role);
@@ -282,8 +286,8 @@ export function compareSampleVersions(
 
 /**
  * Elo-gap comparison when both résumés are in `libraryIds` and already have
- * a score for this role. A missing role score returns null instead of falling
- * back to overall. Drafts stay out of `libraryIds`: their overall is a placeholder.
+ * a placed score for this role. A missing role score returns null instead of
+ * falling back to overall. Drafts stay out of `libraryIds`: their overall is a placeholder.
  */
 export function compareStoredScores(
   a: ResumeVersion,
@@ -293,6 +297,5 @@ export function compareStoredScores(
 ): CompareResult | null {
   if (a.id === b.id) return null;
   if (!libraryIds.has(a.id) || !libraryIds.has(b.id)) return null;
-  if (a.ratings[role] == null || b.ratings[role] == null) return null;
   return compareSampleVersions(a, b, role);
 }

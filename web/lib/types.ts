@@ -101,8 +101,9 @@ export interface CompareResult {
   role: RoleId;
   /** Aggregate probability B is stronger, averaged over both orders. */
   pB: number;
-  eloA: number;
-  eloB: number;
+  /** Null when this role has not been placed on that résumé. Never the overall Elo. */
+  eloA: number | null;
+  eloB: number | null;
   orders: [OrderResult, OrderResult];
   categories: CategoryDuel[];
 }

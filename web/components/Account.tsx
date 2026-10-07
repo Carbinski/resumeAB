@@ -144,8 +144,9 @@ export function Account() {
         </h2>
         {user ? (
           <p className="mt-3 text-[0.9rem] leading-relaxed text-olive">
-            Level and industry decide who appears around you. Focus is your degree
-            family and chooses the tracks. Company is shown on your anonymous card.
+            Level, industry, and company are copied onto the next upload. A résumé
+            already stored keeps the profile it was placed with. Focus is your degree
+            family and chooses the tracks you see.
           </p>
         ) : null}
         {offline ? (

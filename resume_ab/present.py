@@ -102,8 +102,10 @@ def comparison_payload(
         )
     ratings_a = version_payload(store, left)["ratings"]
     ratings_b = version_payload(store, right)["ratings"]
-    elo_a = ratings_a.get(role) if ratings_a.get(role) is not None else ratings_a["overall"]
-    elo_b = ratings_b.get(role) if ratings_b.get(role) is not None else ratings_b["overall"]
+    # A missing track score stays missing. Substituting overall would draw the
+    # overall gap on a role the pair has not been placed in.
+    elo_a = ratings_a.get(role)
+    elo_b = ratings_b.get(role)
     return {
         "a": version_payload(store, left),
         "b": version_payload(store, right),

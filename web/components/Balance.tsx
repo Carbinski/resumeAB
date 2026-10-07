@@ -3,6 +3,7 @@
 import { motion, type Transition } from "motion/react";
 import { ELO_SCALE, clamp } from "@/lib/elo";
 import { cn } from "@/lib/cn";
+import { placedRoleScore } from "@/lib/ratings";
 import type { ResumeVersion } from "@/lib/types";
 import type { RoleId } from "@/lib/roles";
 
@@ -23,9 +24,12 @@ function shownScore(
   pending: boolean,
 ): number | null {
   if (!version || pending) return null;
+  const rating = placedRoleScore(version, role);
+  // A judged number is only drawn when this role was actually placed.
+  // Otherwise an unrated track would show the overall Elo from the compare payload.
+  if (rating == null) return null;
   if (judged != null) return Math.round(judged);
-  const rating = version.ratings[role];
-  return rating == null ? null : Math.round(rating);
+  return Math.round(rating);
 }
 
 /** Positive degrees sink the right pan, so the higher score is heavier. */

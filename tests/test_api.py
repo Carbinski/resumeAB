@@ -528,10 +528,24 @@ def test_focus_signup_profile_and_version_snapshot(tmp_path: Path):
     assert rejected.status_code == 400
     assert client.get("/me").json()["focus"] == ""
 
+    uploaded_next = client.post(
+        "/versions",
+        files={"file": ("next.txt", SECOND.encode(), "text/plain")},
+        data={"note": "After the profile edit", "draft": "false"},
+    )
+    assert uploaded_next.status_code == 200, uploaded_next.text
+    fresh = uploaded_next.json()
+    assert fresh["industry"] == "defense"
+    assert fresh["company"] == "Other Co"
+    assert fresh["level"] == "newgrad"
+
     versions = client.get("/versions").json()
     assert versions[0]["industry"] == "software"
     assert versions[0]["company"] == "Northwind"
     assert versions[0]["level"] == "intern"
+    assert versions[1]["id"] == fresh["id"]
+    assert versions[1]["industry"] == "defense"
+    assert versions[1]["level"] == "newgrad"
 
     healthcare = TestClient(client.app)
     suggested = healthcare.post(
@@ -569,6 +583,68 @@ def test_focus_signup_profile_and_version_snapshot(tmp_path: Path):
     assert suggested_focus("consulting") == ""
     assert suggested_focus("robotics") == ""
     assert suggested_focus("finance") == ""
+
+
+def test_unrated_role_compare_does_not_borrow_overall_elo(tmp_path: Path):
+    client, _judge, _store = _client(tmp_path)
+    _signup(client, "ada@example.test", "Northwind")
+    first = client.post(
+        "/versions",
+        files={"file": ("one.txt", RESUME.encode(), "text/plain")},
+        data={"draft": "false"},
+    )
+    second = client.post(
+        "/versions",
+        files={"file": ("two.txt", SECOND.encode(), "text/plain")},
+        data={"draft": "false"},
+    )
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    left = first.json()
+    right = second.json()
+    assert left["ratings"]["embedded"] is None
+    assert right["ratings"]["embedded"] is None
+    assert isinstance(left["ratings"]["overall"], int)
+    assert isinstance(right["ratings"]["overall"], int)
+
+    compared = client.post(
+        "/compare",
+        json={"aId": left["id"], "bId": right["id"], "role": "embedded"},
+    )
+    assert compared.status_code == 200, compared.text
+    body = compared.json()
+    assert body["role"] == "embedded"
+    assert body["eloA"] is None
+    assert body["eloB"] is None
+    assert isinstance(body["pB"], float)
+
+    overall = client.post(
+        "/compare",
+        json={"aId": left["id"], "bId": right["id"], "role": "overall"},
+    )
+    assert overall.status_code == 200, overall.text
+    overall_body = overall.json()
+    assert overall_body["eloA"] == overall_body["a"]["ratings"]["overall"]
+    assert overall_body["eloB"] == overall_body["b"]["ratings"]["overall"]
+    assert overall_body["eloA"] is not None
+    assert overall_body["eloB"] is not None
+
+    rated_left = client.post(f"/versions/{left['id']}/roles/embedded")
+    rated_right = client.post(f"/versions/{right['id']}/roles/embedded")
+    assert rated_left.status_code == 200, rated_left.text
+    assert rated_right.status_code == 200, rated_right.text
+    placed = client.post(
+        "/compare",
+        json={"aId": left["id"], "bId": right["id"], "role": "embedded"},
+    )
+    assert placed.status_code == 200, placed.text
+    placed_body = placed.json()
+    assert placed_body["a"]["roleStatus"]["embedded"]["status"] == "rated"
+    assert placed_body["b"]["roleStatus"]["embedded"]["status"] == "rated"
+    assert placed_body["eloA"] == placed_body["a"]["ratings"]["embedded"]
+    assert placed_body["eloB"] == placed_body["b"]["ratings"]["embedded"]
+    assert isinstance(placed_body["eloA"], int)
+    assert isinstance(placed_body["eloB"], int)
 
 
 def test_new_track_is_accepted_and_unknown_role_is_rejected(tmp_path: Path):

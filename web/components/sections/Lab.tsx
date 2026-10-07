@@ -14,7 +14,7 @@ import { ACCEPTED_FORMATS } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { trackVerdict } from "@/lib/elo";
 import { LABEL_MAX, labelFromFileName } from "@/lib/labels";
-import { placedTrackDelta } from "@/lib/ratings";
+import { placedRoleScore, placedTrackDelta } from "@/lib/ratings";
 import { ROLE_BY_ID, labRoleIds, stripTrackIds, type TrackId } from "@/lib/roles";
 import type { CompareResult, ResumeVersion } from "@/lib/types";
 import { Balance } from "../Balance";
@@ -412,12 +412,13 @@ export function Lab() {
     setError(null);
     frameStage();
     if (demo) {
-      if (a.ratings[role] == null || challenger.ratings[role] == null) {
+      const outcome = compareSampleVersions(a, challenger, role);
+      if (!outcome) {
         setError("This role has not been rated on both resumes.");
         setPhase("setup");
         return;
       }
-      setResult(compareSampleVersions(a, challenger, role));
+      setResult(outcome);
       setPhase("result");
       return;
     }
@@ -449,7 +450,7 @@ export function Lab() {
   const roleUnrated =
     !!challenger &&
     challenger.id !== a.id &&
-    (a.ratings[role] == null || challenger.ratings[role] == null);
+    (placedRoleScore(a, role) == null || placedRoleScore(challenger, role) == null);
   const hint = drafting
     ? "Rating your edit…"
     : !challenger

@@ -11,6 +11,7 @@ import {
   pBInOrder,
   verdictFor,
 } from "@/lib/elo";
+import { placedTrackDelta } from "@/lib/ratings";
 import { ROLE_BY_ID } from "@/lib/roles";
 import type { CompareResult } from "@/lib/types";
 import { CategoryGlyph } from "./ui/CategoryGlyph";
@@ -49,6 +50,12 @@ export function Verdict({ result }: { result: CompareResult }) {
     verdict === "tie"
       ? `Split ${formatPercent(1 - result.pB)} to ${formatPercent(result.pB)}${forRole}.`
       : `${verdict === "b" ? "B" : "A"} comes out ahead in ${winPct} of head-to-head matchups${forRole}.`;
+  const eloDelta =
+    result.role === "overall"
+      ? result.eloA != null && result.eloB != null
+        ? result.eloB - result.eloA
+        : null
+      : placedTrackDelta(result.a, result.b, result.role);
 
   return (
     <div className="text-center">
@@ -66,7 +73,7 @@ export function Verdict({ result }: { result: CompareResult }) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.9, ease: EASE, delay: 0.2 }}
       >
-        <DeltaChip delta={result.eloB - result.eloA} suffix="ELO for B" />
+        {eloDelta != null ? <DeltaChip delta={eloDelta} suffix="ELO for B" /> : null}
         <span className="text-[1rem] text-olive">{detail}</span>
       </motion.div>
       <motion.p
