@@ -12,12 +12,24 @@ import { loadInitial } from "@/lib/server-api";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ demo?: string | string[] }>;
+}) {
   const { history, user, offline } = await loadInitial();
+  const params = await searchParams;
+  const demo = params.demo;
+  const initialDemo = demo === "1" || (Array.isArray(demo) && demo.includes("1"));
 
   return (
     <SmoothScroll>
-      <LadderProvider initialHistory={history} initialUser={user} offline={offline}>
+      <LadderProvider
+        initialHistory={history}
+        initialUser={user}
+        offline={offline}
+        initialDemo={initialDemo}
+      >
         <Nav />
         <main className="m-2 overflow-clip rounded-[28px] border border-bark/10 bg-cream md:m-3 md:rounded-[44px]">
           <Hero />

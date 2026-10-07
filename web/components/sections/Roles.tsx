@@ -32,7 +32,7 @@ function Rung({
   highlightId: string;
   index: number;
 }) {
-  const { history, rateForRole, roleRun } = useLadder();
+  const { history, rateForRole, roleRun, demo } = useLadder();
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "0px 0px -12% 0px" });
   const role = ROLES.find((r) => r.id === roleId)!;
@@ -144,13 +144,17 @@ function Rung({
       </button>
       {now == null && roleId !== "overall" && history.length > 0 ? (
         <div className="relative px-2 pb-4 pl-10">
-          <Button
-            type="button"
-            disabled={roleRun != null}
-            onClick={() => void rateForRole(roleId)}
-          >
-            {roleRun === roleId ? "Rating…" : "Rate your latest resume"}
-          </Button>
+          {demo ? (
+            <p className="text-[0.86rem] text-olive">Sample history leaves this role unrated.</p>
+          ) : (
+            <Button
+              type="button"
+              disabled={roleRun != null}
+              onClick={() => void rateForRole(roleId)}
+            >
+              {roleRun === roleId ? "Rating…" : "Rate your latest resume"}
+            </Button>
+          )}
         </div>
       ) : null}
     </div>
@@ -158,7 +162,7 @@ function Rung({
 }
 
 function AddRole() {
-  const { history, current } = useLadder();
+  const { history, current, demo } = useLadder();
   const [text, setText] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -166,6 +170,10 @@ function AddRole() {
   const previous = history.length > 1 ? history[history.length - 2] : undefined;
 
   const run = async () => {
+    if (demo) {
+      setMessage("Sample history stays on this page. Leave it to rate a job description.");
+      return;
+    }
     if (!current || !previous) {
       setMessage("Upload two versions to compare them against this description.");
       return;

@@ -21,7 +21,7 @@ function retiredIndustryLabel(id: string): string {
 }
 
 export function Account() {
-  const { user, setUser, offline, refresh, signOut } = useLadder();
+  const { user, setUser, offline, refresh, signOut, demo } = useLadder();
   const [mode, setMode] = useState<"signup" | "login">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,6 +34,14 @@ export function Account() {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const submit = async () => {
+    if (demo) {
+      setError(
+        mode === "login"
+          ? "Leave sample history before logging in."
+          : "Leave sample history before creating an account.",
+      );
+      return;
+    }
     if (password.length < 8) {
       setError("Use at least 8 characters.");
       return;
@@ -64,6 +72,10 @@ export function Account() {
   };
 
   const saveProfile = async () => {
+    if (demo) {
+      setError("Leave sample history before changing your account.");
+      return;
+    }
     if (!isCurrentIndustry(industry)) {
       setError("Pick an industry from the list.");
       return;
@@ -81,6 +93,10 @@ export function Account() {
   };
 
   const remove = async () => {
+    if (demo) {
+      setError("Leave sample history before deleting an account.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -109,6 +125,11 @@ export function Account() {
         {offline ? (
           <p className="mt-3 text-[0.86rem] text-clay" role="status">
             The rating service is not running.
+          </p>
+        ) : null}
+        {demo ? (
+          <p className="mt-3 text-[0.86rem] text-olive" role="status">
+            Sample history. Creating an account, logging in, and deleting stay off until you leave it.
           </p>
         ) : null}
 

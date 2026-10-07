@@ -13,6 +13,7 @@ import {
 import { deleteVersion, getHistory, isSupportedResume, publishVersion, rateRole, uploadResume } from "@/lib/api";
 import { ACCEPTED_FORMATS } from "@/lib/brand";
 import { labelFromFileName } from "@/lib/labels";
+import { SAMPLE_HISTORY } from "@/lib/sampleHistory";
 import type { RoleId } from "@/lib/roles";
 import type { Account, ResumeVersion } from "@/lib/types";
 
@@ -48,6 +49,10 @@ interface LadderState {
   rateForRole: (role: Exclude<RoleId, "overall">) => Promise<void>;
   roleRun: RoleId | null;
   signOut: () => void;
+  /** Sample history is on screen. Live account data is kept and restored on exit. */
+  demo: boolean;
+  enterDemo: () => void;
+  exitDemo: () => void;
 }
 
 const Ctx = createContext<LadderState | null>(null);
@@ -65,18 +70,28 @@ function needsPoll(version: ResumeVersion): boolean {
   );
 }
 
+function setDemoQuery(on: boolean) {
+  const url = new URL(window.location.href);
+  if (on) url.searchParams.set("demo", "1");
+  else url.searchParams.delete("demo");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 export function LadderProvider({
   initialHistory,
   initialUser,
   offline,
+  initialDemo = false,
   children,
 }: {
   initialHistory: ResumeVersion[];
   initialUser: Account | null;
   offline: boolean;
+  initialDemo?: boolean;
   children: ReactNode;
 }) {
-  const [history, setHistory] = useState(initialHistory);
+  const [liveHistory, setLiveHistory] = useState(initialHistory);
+  const [demo, setDemo] = useState(initialDemo);
   const [user, setUser] = useState(initialUser);
   const [role, setRole] = useState<RoleId>("overall");
   const [upload, setUpload] = useState<UploadStatus>({ phase: "idle" });
@@ -84,23 +99,38 @@ export function LadderProvider({
   const pendingFile = useRef<File | null>(null);
   const confirming = useRef(false);
 
+  const history = demo ? SAMPLE_HISTORY : liveHistory;
   const current = history.length > 0 ? history[history.length - 1] : null;
 
+  const enterDemo = useCallback(() => {
+    pendingFile.current = null;
+    setDemo(true);
+    setUpload({ phase: "idle" });
+    setDemoQuery(true);
+  }, []);
+
+  const exitDemo = useCallback(() => {
+    setDemo(false);
+    setUpload({ phase: "idle" });
+    setDemoQuery(false);
+  }, []);
+
   const refresh = useCallback(async () => {
+    if (demo) return;
     const next = await getHistory();
-    setHistory(next);
+    setLiveHistory(next);
     setUpload((state) => {
       if (state.phase !== "done" && state.phase !== "processing") return state;
       return state;
     });
-  }, []);
+  }, [demo]);
 
   useEffect(() => {
-    if (!history.some(needsPoll)) return;
+    if (demo || !liveHistory.some(needsPoll)) return;
     const timer = setInterval(() => {
       void getHistory()
         .then((next) => {
-          setHistory(next);
+          setLiveHistory(next);
           setUpload((state) => {
             if (state.phase !== "done") return state;
             const updated = next.find((version) => version.id === state.version.id);
@@ -116,7 +146,7 @@ export function LadderProvider({
         .catch(() => undefined);
     }, 2000);
     return () => clearInterval(timer);
-  }, [history]);
+  }, [demo, liveHistory]);
 
   const requireAccount = useCallback(() => {
     if (user) return true;
@@ -127,6 +157,10 @@ export function LadderProvider({
 
   const proposeFile = useCallback(
     (file: File) => {
+      if (demo) {
+        setUpload({ phase: "error", message: "Leave sample history before uploading." });
+        return;
+      }
       if (!requireAccount()) return;
       if (upload.phase === "processing") return;
       if (!isSupportedResume(file.name)) {
@@ -144,11 +178,15 @@ export function LadderProvider({
         suggested: labelFromFileName(file.name),
       });
     },
-    [requireAccount, upload.phase],
+    [demo, requireAccount, upload.phase],
   );
 
   const confirmName = useCallback(
     async (label: string) => {
+      if (demo) {
+        setUpload({ phase: "error", message: "Leave sample history before uploading." });
+        return null;
+      }
       const file = pendingFile.current;
       const name = label.trim();
       if (!file || !name || confirming.current) return null;
@@ -162,7 +200,7 @@ export function LadderProvider({
           label: name,
         });
         pendingFile.current = null;
-        setHistory((items) =>
+        setLiveHistory((items) =>
           items.some((item) => item.id === version.id) ? items : [...items, version],
         );
         setUpload({
@@ -178,7 +216,7 @@ export function LadderProvider({
           message: error instanceof Error ? error.message : "Something went wrong.",
         });
         try {
-          setHistory(await getHistory());
+          setLiveHistory(await getHistory());
         } catch {
           // The dropzone already shows the upload error.
         }
@@ -187,7 +225,7 @@ export function LadderProvider({
         confirming.current = false;
       }
     },
-    [current, requireAccount],
+    [current, demo, requireAccount],
   );
 
   const cancelNaming = useCallback(() => {
@@ -196,17 +234,25 @@ export function LadderProvider({
   }, []);
 
   const removeVersion = useCallback(async (id: string) => {
+    if (demo) {
+      setUpload({ phase: "error", message: "Leave sample history before removing a resume." });
+      return;
+    }
     await deleteVersion(id);
-    setHistory((items) => items.filter((item) => item.id !== id));
+    setLiveHistory((items) => items.filter((item) => item.id !== id));
     setUpload((state) =>
       state.phase === "done" && state.version.id === id ? { phase: "idle" } : state,
     );
-  }, []);
+  }, [demo]);
 
   const addVersion = useCallback(async (version: ResumeVersion) => {
+    if (demo) {
+      setUpload({ phase: "error", message: "Leave sample history before saving a version." });
+      return null;
+    }
     try {
       const published = await publishVersion(version.id);
-      setHistory((items) =>
+      setLiveHistory((items) =>
         items.some((item) => item.id === published.id)
           ? items.map((item) => (item.id === published.id ? published : item))
           : [...items, published],
@@ -219,16 +265,20 @@ export function LadderProvider({
       });
       return null;
     }
-  }, []);
+  }, [demo]);
 
   const rateForRole = useCallback(
     async (nextRole: Exclude<RoleId, "overall">) => {
+      if (demo) {
+        setUpload({ phase: "error", message: "Leave sample history before rating a role." });
+        return;
+      }
       const latest = current;
       if (!latest) return;
       setRoleRun(nextRole);
       try {
         const version = await rateRole(latest.id, nextRole);
-        setHistory((items) => items.map((item) => (item.id === version.id ? version : item)));
+        setLiveHistory((items) => items.map((item) => (item.id === version.id ? version : item)));
       } catch (error) {
         setUpload({
           phase: "error",
@@ -238,7 +288,7 @@ export function LadderProvider({
         setRoleRun(null);
       }
     },
-    [current],
+    [current, demo],
   );
 
   const resetUpload = useCallback(() => {
@@ -248,15 +298,19 @@ export function LadderProvider({
   const signOut = useCallback(() => {
     pendingFile.current = null;
     setUser(null);
-    setHistory([]);
+    setLiveHistory([]);
     setUpload({ phase: "idle" });
   }, []);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const pickFile = useCallback(() => {
+    if (demo) {
+      setUpload({ phase: "error", message: "Leave sample history before uploading." });
+      return;
+    }
     if (!requireAccount()) return;
     inputRef.current?.click();
-  }, [requireAccount]);
+  }, [demo, requireAccount]);
 
   const value = useMemo(
     () => ({
@@ -279,6 +333,9 @@ export function LadderProvider({
       rateForRole,
       roleRun,
       signOut,
+      demo,
+      enterDemo,
+      exitDemo,
     }),
     [
       history,
@@ -298,6 +355,9 @@ export function LadderProvider({
       rateForRole,
       roleRun,
       signOut,
+      demo,
+      enterDemo,
+      exitDemo,
     ],
   );
 
