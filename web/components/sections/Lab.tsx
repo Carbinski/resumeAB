@@ -4,7 +4,12 @@ import { AnimatePresence, motion } from "motion/react";
 import { useLenis } from "lenis/react";
 import { useRef, useState } from "react";
 import { compareVersions, isSupportedResume, uploadResume } from "@/lib/api";
-import { compareSampleVersions } from "@/lib/sampleHistory";
+import {
+  AI_ML_RESUME,
+  CLOUD_OPS_RESUME,
+  compareSampleVersions,
+  compareStoredScores,
+} from "@/lib/sampleHistory";
 import { ACCEPTED_FORMATS } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { LABEL_MAX, labelFromFileName } from "@/lib/labels";
@@ -281,11 +286,19 @@ export function Lab() {
     );
   }
 
-  const a = history.find((v) => v.id === aId) ?? current;
-  const challenger = visibleChallenger(b, history, draftId, demo);
+  // The role pair is only for the lab. Jordan Hale's history stays on the chart.
+  const labVersions = demo ? [...history, CLOUD_OPS_RESUME, AI_ML_RESUME] : history;
+  const libraryIds = new Set(labVersions.map((version) => version.id));
+  const a = labVersions.find((version) => version.id === aId) ?? (demo ? AI_ML_RESUME : current);
+  const selectedChallenger = visibleChallenger(b, labVersions, draftId, demo);
+  const challenger =
+    selectedChallenger ??
+    (demo ? (a.id === CLOUD_OPS_RESUME.id ? AI_ML_RESUME : CLOUD_OPS_RESUME) : null);
   const ready = !!challenger && challenger.id !== a.id && !drafting;
-  const bIsDraft = !!challenger && !history.some((v) => v.id === challenger.id);
-  const shownResult =
+  const bIsDraft = !!challenger && !libraryIds.has(challenger.id);
+  const storedResult =
+    ready && challenger ? compareStoredScores(a, challenger, role, libraryIds) : null;
+  const liveResult =
     result &&
     challenger &&
     result.a.id === a.id &&
@@ -293,8 +306,15 @@ export function Lab() {
     result.role === role
       ? result
       : null;
-  const shownPhase: Phase = phase === "running" ? "running" : shownResult ? "result" : "setup";
-  const displayResult = phase === "running" ? result : shownResult;
+  const shownResult = storedResult ?? liveResult;
+  const shownPhase: Phase = storedResult
+    ? "result"
+    : phase === "running"
+      ? "running"
+      : shownResult
+        ? "result"
+        : "setup";
+  const displayResult = storedResult ?? (phase === "running" ? result : liveResult);
 
   const reset = () => {
     setPhase("setup");
@@ -316,7 +336,7 @@ export function Lab() {
   };
 
   const run = async () => {
-    if (!challenger || !ready) return;
+    if (!challenger || !ready || storedResult) return;
     setSavedAs(null);
     setError(null);
     frameStage();
@@ -378,7 +398,7 @@ export function Lab() {
             </p>
             <VersionChips
               label="Baseline version"
-              versions={history}
+              versions={labVersions}
               selectedId={a.id}
               onSelect={(v) => {
                 setAId(v.id);
@@ -404,7 +424,7 @@ export function Lab() {
                 <span className="shrink-0 text-[0.78rem] text-taupe">or</span>
                 <VersionChips
                   label="Challenger version"
-                  versions={history.filter((v) => v.id !== a.id)}
+                  versions={labVersions.filter((v) => v.id !== a.id)}
                   selectedId={challenger?.id}
                   onSelect={(v) => {
                     setDraftId(null);
@@ -459,11 +479,13 @@ export function Lab() {
           </div>
 
           <div className="mt-4 flex flex-col items-center gap-5">
-            <Magnetic>
-              <Button className="h-12 min-w-[12rem] px-8" disabled={!ready || shownPhase === "running"} onClick={run}>
-                {shownPhase === "running" ? "Weighing…" : shownPhase === "result" ? "Run it again" : "Run comparison"}
-              </Button>
-            </Magnetic>
+            {storedResult ? null : (
+              <Magnetic>
+                <Button className="h-12 min-w-[12rem] px-8" disabled={!ready || shownPhase === "running"} onClick={run}>
+                  {shownPhase === "running" ? "Weighing…" : shownPhase === "result" ? "Run it again" : "Run comparison"}
+                </Button>
+              </Magnetic>
+            )}
             {demo ? (
               <p className="max-w-md text-center text-[0.85rem] leading-snug text-olive">
                 Sample history. Scored from the Elo gap on this page, not a live rating.
@@ -478,6 +500,8 @@ export function Lab() {
                 value={role}
                 onChange={(r) => {
                   setRole(r);
+                  // Clears a live judge result. A comparison that can be derived
+                  // from stored scores is computed above and stays on screen.
                   reset();
                 }}
               />
@@ -517,20 +541,24 @@ export function Lab() {
               </div>
             </div>
 
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3 pb-1">
-              {savedAs ? (
-                <p role="status" className="rounded-full bg-peach px-5 py-3 text-[0.9rem] text-bark">
-                  Saved as {savedAs}. It now counts toward your ELO history.
-                </p>
-              ) : challenger && bIsDraft ? (
-                <Button variant="ink" onClick={() => void keep()} className="max-w-full">
-                  <span className="max-w-[18rem] truncate">Keep {challenger.label}</span>
-                </Button>
-              ) : null}
-              <Button variant="outline" onClick={backToStage}>
-                Compare something else
-              </Button>
-            </div>
+            {savedAs || (challenger && bIsDraft) || !storedResult ? (
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3 pb-1">
+                {savedAs ? (
+                  <p role="status" className="rounded-full bg-peach px-5 py-3 text-[0.9rem] text-bark">
+                    Saved as {savedAs}. It now counts toward your ELO history.
+                  </p>
+                ) : challenger && bIsDraft ? (
+                  <Button variant="ink" onClick={() => void keep()} className="max-w-full">
+                    <span className="max-w-[18rem] truncate">Keep {challenger.label}</span>
+                  </Button>
+                ) : null}
+                {storedResult ? null : (
+                  <Button variant="outline" onClick={backToStage}>
+                    Compare something else
+                  </Button>
+                )}
+              </div>
+            ) : null}
           </motion.div>
         ) : null}
       </AnimatePresence>
