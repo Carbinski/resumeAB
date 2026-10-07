@@ -98,6 +98,13 @@ export function LadderProvider({
   const [roleRun, setRoleRun] = useState<RoleId | null>(null);
   const pendingFile = useRef<File | null>(null);
   const confirming = useRef(false);
+  const removedIds = useRef(new Set<string>());
+
+  const withoutRemoved = useCallback((next: ResumeVersion[]) => {
+    const hidden = removedIds.current;
+    if (hidden.size === 0) return next;
+    return next.filter((version) => !hidden.has(version.id));
+  }, []);
 
   const history = demo ? SAMPLE_HISTORY : liveHistory;
   const current = history.length > 0 ? history[history.length - 1] : null;
@@ -118,24 +125,25 @@ export function LadderProvider({
   const refresh = useCallback(async () => {
     if (demo) return;
     const next = await getHistory();
-    setLiveHistory(next);
+    setLiveHistory(withoutRemoved(next));
     setUpload((state) => {
       if (state.phase !== "done" && state.phase !== "processing") return state;
       return state;
     });
-  }, [demo]);
+  }, [demo, withoutRemoved]);
 
   useEffect(() => {
     if (demo || !liveHistory.some(needsPoll)) return;
     const timer = setInterval(() => {
       void getHistory()
         .then((next) => {
-          setLiveHistory(next);
+          const visible = withoutRemoved(next);
+          setLiveHistory(visible);
           setUpload((state) => {
             if (state.phase !== "done") return state;
-            const updated = next.find((version) => version.id === state.version.id);
+            const updated = visible.find((version) => version.id === state.version.id);
             if (!updated) return state;
-            const previous = next[next.findIndex((version) => version.id === updated.id) - 1];
+            const previous = visible[visible.findIndex((version) => version.id === updated.id) - 1];
             return {
               phase: "done",
               version: updated,
@@ -146,7 +154,7 @@ export function LadderProvider({
         .catch(() => undefined);
     }, 2000);
     return () => clearInterval(timer);
-  }, [demo, liveHistory]);
+  }, [demo, liveHistory, withoutRemoved]);
 
   const requireAccount = useCallback(() => {
     if (user) return true;
@@ -216,7 +224,7 @@ export function LadderProvider({
           message: error instanceof Error ? error.message : "Something went wrong.",
         });
         try {
-          setLiveHistory(await getHistory());
+          setLiveHistory(withoutRemoved(await getHistory()));
         } catch {
           // The dropzone already shows the upload error.
         }
@@ -225,7 +233,7 @@ export function LadderProvider({
         confirming.current = false;
       }
     },
-    [current, demo, requireAccount],
+    [current, demo, requireAccount, withoutRemoved],
   );
 
   const cancelNaming = useCallback(() => {
@@ -239,6 +247,7 @@ export function LadderProvider({
       return;
     }
     await deleteVersion(id);
+    removedIds.current.add(id);
     setLiveHistory((items) => items.filter((item) => item.id !== id));
     setUpload((state) =>
       state.phase === "done" && state.version.id === id ? { phase: "idle" } : state,
@@ -297,6 +306,7 @@ export function LadderProvider({
   }, []);
   const signOut = useCallback(() => {
     pendingFile.current = null;
+    removedIds.current.clear();
     setUser(null);
     setLiveHistory([]);
     setUpload({ phase: "idle" });
