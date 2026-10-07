@@ -106,7 +106,6 @@ CREATE TABLE IF NOT EXISTS comparisons (
 
 
 _LABEL_LIMIT = 80
-_DRAFT_LABEL = "Draft"
 
 
 def _now() -> str:
@@ -458,7 +457,7 @@ class Store:
         """Returns the résumé and whether this call created it.
 
         ``label`` is the name the user typed. When it is missing, a published
-        résumé still falls back to ``vN`` and a draft to ``Draft``.
+        résumé is named ``vN`` and a draft is left unnamed (shown as Draft).
         """
         digest = content_sha256(redacted_text)
         provided = _clean_label(label)
@@ -490,7 +489,7 @@ class Store:
             elif published:
                 stored_label = self._next_label(user.id)
             else:
-                stored_label = _DRAFT_LABEL
+                stored_label = None
             label = stored_label
             self._conn.execute(
                 """
@@ -793,11 +792,19 @@ class Store:
         return _resume(row) if row else None
 
     def _next_label(self, user_id: str) -> str:
-        count = self._conn.execute(
-            "SELECT COUNT(*) AS n FROM resumes WHERE user_id = ? AND published = 1 AND tombstoned = 0",
+        """Smallest ``vN`` that is not already the name of one of this user's live résumés."""
+        rows = self._conn.execute(
+            """
+            SELECT label FROM resumes
+            WHERE user_id = ? AND tombstoned = 0 AND label IS NOT NULL AND label != ''
+            """,
             (user_id,),
-        ).fetchone()["n"]
-        return f"v{count + 1}"
+        ).fetchall()
+        taken = {row["label"] for row in rows}
+        number = 1
+        while f"v{number}" in taken:
+            number += 1
+        return f"v{number}"
 
     def _label_or_next(self, user_id: str, current: str | None) -> str:
         """Keep a stored name. Only a blank label falls back to ``vN``."""
