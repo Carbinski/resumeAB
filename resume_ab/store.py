@@ -360,11 +360,6 @@ class Store:
             self._conn.close()
 
     def _ensure_focus_column(self) -> None:
-        """Add ``users.focus`` on databases created before that column existed.
-
-        ``CREATE TABLE IF NOT EXISTS`` does not alter a table that is already
-        there. Checking the columns first makes this safe to run twice.
-        """
         columns = {row["name"] for row in self._conn.execute("PRAGMA table_info(users)")}
         if "focus" in columns:
             return
@@ -408,14 +403,7 @@ class Store:
                             "UPDATE resumes SET content_sha256 = ?, redacted_text = ? WHERE id = ?",
                             (digest, text, resume_id),
                         )
-                self._conn.execute(
-                    """
-                    INSERT INTO memberships (resume_id, pool_id, elo, match_count, status)
-                    VALUES (?, ?, 1000, 0, 'rated')
-                    ON CONFLICT (resume_id, pool_id) DO NOTHING
-                    """,
-                    (resume_id, spec.level),
-                )
+                self._insert_membership(resume_id, spec.level, "rated")
             self._conn.commit()
 
     def ensure_pool_anchors(self, pool_id: str, level: str) -> None:
@@ -425,14 +413,7 @@ class Store:
                 (level,),
             ).fetchall()
             for row in rows:
-                self._conn.execute(
-                    """
-                    INSERT INTO memberships (resume_id, pool_id, elo, match_count, status)
-                    VALUES (?, ?, 1000, 0, 'rated')
-                    ON CONFLICT (resume_id, pool_id) DO NOTHING
-                    """,
-                    (row["id"], pool_id),
-                )
+                self._insert_membership(row["id"], pool_id, "rated")
             self._conn.commit()
 
     def create_user(
@@ -621,13 +602,7 @@ class Store:
             resume_id = uuid.uuid4().hex
             blob = self._blob_for(resume_id, suffix)
             _write_private(blob, file_bytes)
-            if provided:
-                stored_label = provided
-            elif published:
-                stored_label = self._next_label(user.id)
-            else:
-                stored_label = None
-            label = stored_label
+            stored_label = provided or (self._next_label(user.id) if published else None)
             self._conn.execute(
                 """
                 INSERT INTO resumes (
@@ -642,7 +617,7 @@ class Store:
                     user.industry,
                     user.company,
                     file_name,
-                    label,
+                    stored_label,
                     note,
                     source_type,
                     digest,
@@ -732,16 +707,19 @@ class Store:
             ).fetchone()
             return _resume(row) if row else None
 
+    def _insert_membership(self, resume_id: str, pool_id: str, status: str) -> None:
+        self._conn.execute(
+            """
+            INSERT INTO memberships (resume_id, pool_id, elo, match_count, status)
+            VALUES (?, ?, 1000, 0, ?)
+            ON CONFLICT (resume_id, pool_id) DO NOTHING
+            """,
+            (resume_id, pool_id, status),
+        )
+
     def ensure_membership(self, resume_id: str, pool_id: str, *, status: str = "placing") -> Membership:
         with self._lock:
-            self._conn.execute(
-                """
-                INSERT INTO memberships (resume_id, pool_id, elo, match_count, status)
-                VALUES (?, ?, 1000, 0, ?)
-                ON CONFLICT (resume_id, pool_id) DO NOTHING
-                """,
-                (resume_id, pool_id, status),
-            )
+            self._insert_membership(resume_id, pool_id, status)
             self._conn.commit()
             row = self._conn.execute(
                 "SELECT * FROM memberships WHERE resume_id = ? AND pool_id = ?",
@@ -792,10 +770,10 @@ class Store:
                 """,
                 (pool_id, resume_id, resume_id),
             ).fetchall()
-            others = set()
-            for row in rows:
-                others.add(row["right_id"] if row["left_id"] == resume_id else row["left_id"])
-            return others
+            return {
+                row["right_id"] if row["left_id"] == resume_id else row["left_id"]
+                for row in rows
+            }
 
     def save_match(
         self,

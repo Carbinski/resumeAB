@@ -18,31 +18,19 @@ from resume_ab.cohort import (
     rounded_percentile,
 )
 from resume_ab.compare import CompareResult, aggregate_categories, aggregate_result
-from resume_ab.store import Resume, Store
+from resume_ab.store import Membership, Resume, Store
+
+_PLACED = frozenset({"provisional", "rated"})
 
 
 def version_payload(store: Store, resume: Resume) -> dict:
     level = resume.level or "intern"
     memberships = store.memberships_for(resume.id)
-    overall = memberships.get(overall_pool(level))
-    people = _people(store, overall_pool(level))
+    pool = overall_pool(level)
+    overall = memberships.get(pool)
     elo = overall.elo if overall else 1000.0
-    status = overall.status if overall else "placing"
-    placed = status in {"provisional", "rated"}
-    others = [
-        person.elo
-        for person in people
-        if person.placed and not person.synthetic and not person.tombstoned and person.id != resume.id
-    ]
-    me = Person(
-        id=resume.id,
-        elo=elo,
-        level=level,
-        industry=resume.industry or "other",
-        company=resume.company,
-        placed=placed,
-    )
-    cards, widened = neighbors_for(me, people) if placed else ([], False)
+    placed = (overall.status if overall else "placing") in _PLACED
+    role_ratings, role_status = _roles(memberships, level)
     return {
         "id": resume.id,
         "level": level,
@@ -52,28 +40,20 @@ def version_payload(store: Store, resume: Resume) -> dict:
         "fileName": resume.file_name or "resume",
         "uploadedAt": resume.created_at,
         "note": resume.note,
-        "ratings": {
-            "overall": round(elo),
-            **{role: _role_elo(memberships, level, role) for role in ROLE_IDS},
-        },
+        "ratings": {"overall": round(elo), **role_ratings},
         "categories": {
             category_id: round(score)
             for category_id, score in store.category_scores(resume.id).items()
         },
-        "roleStatus": {
-            role: _role_state(memberships, level, role) for role in ROLE_IDS
-        },
-        "standing": {
-            "status": status,
-            "message": overall.error if overall and overall.error else None,
-            "band": band_label(elo),
-            "percentile": rounded_percentile(elo, others) if placed else None,
-            "histogram": histogram(people, level),
-            "neighbors": [_neighbor(card) for card in cards],
-            "widened": widened,
-            "matchesPlayed": overall.match_count if overall else 0,
-            "matchBudget": MATCH_BUDGET,
-        },
+        "roleStatus": role_status,
+        "standing": _standing(
+            resume,
+            overall,
+            _people(store, pool),
+            level=level,
+            elo=elo,
+            placed=placed,
+        ),
     }
 
 
@@ -86,36 +66,24 @@ def comparison_payload(
     role: str,
 ) -> dict:
     """``left`` is résumé A and ``right`` is résumé B, matching the website."""
-    p_b = 1 - aggregate_result(result)
-    categories = []
-    left_overall = version_payload(store, left)["ratings"]["overall"]
-    for category_id, p_left in aggregate_categories(result).items():
-        p_category_b = 1 - p_left
-        elo_b = _elo_from_base(left_overall, p_category_b)
-        categories.append(
-            {
-                "id": category_id,
-                "pB": p_category_b,
-                "eloA": left_overall,
-                "eloB": round(elo_b),
-            }
-        )
-    ratings_a = version_payload(store, left)["ratings"]
-    ratings_b = version_payload(store, right)["ratings"]
-    elo_a = ratings_a.get(role) if ratings_a.get(role) is not None else ratings_a["overall"]
-    elo_b = ratings_b.get(role) if ratings_b.get(role) is not None else ratings_b["overall"]
+    a = version_payload(store, left)
+    b = version_payload(store, right)
+    left_overall = a["ratings"]["overall"]
     return {
-        "a": version_payload(store, left),
-        "b": version_payload(store, right),
+        "a": a,
+        "b": b,
         "role": role,
-        "pB": p_b,
-        "eloA": elo_a,
-        "eloB": elo_b,
+        "pB": 1 - aggregate_result(result),
+        "eloA": _shown_elo(a["ratings"], role),
+        "eloB": _shown_elo(b["ratings"], role),
         "orders": [
             _order_payload("a", result.first),
             _order_payload("b", result.second),
         ],
-        "categories": categories,
+        "categories": [
+            _category_duel(category_id, p_left, left_overall)
+            for category_id, p_left in aggregate_categories(result).items()
+        ],
     }
 
 
@@ -131,35 +99,93 @@ def user_payload(user) -> dict:
 
 
 def _people(store: Store, pool_id: str) -> list[Person]:
-    people = []
-    for row in store.pool_rows(pool_id):
-        people.append(
-            Person(
-                id=row["id"],
-                elo=row["elo"],
-                level=row["level"] or "",
-                industry=row["industry"] or "",
-                company=row["company"],
-                synthetic=bool(row["is_synthetic"]),
-                tombstoned=bool(row["tombstoned"]),
-                placed=row["status"] in {"provisional", "rated"},
-            )
-        )
-    return people
+    return [_person(row) for row in store.pool_rows(pool_id)]
 
 
-def _role_state(memberships, level: str, role: str) -> dict | None:
-    membership = memberships.get(f"{level}:{role}")
+def _person(row) -> Person:
+    return Person(
+        id=row["id"],
+        elo=row["elo"],
+        level=row["level"] or "",
+        industry=row["industry"] or "",
+        company=row["company"],
+        synthetic=bool(row["is_synthetic"]),
+        tombstoned=bool(row["tombstoned"]),
+        placed=row["status"] in _PLACED,
+    )
+
+
+def _roles(memberships, level: str) -> tuple[dict[str, int | None], dict[str, dict | None]]:
+    ratings: dict[str, int | None] = {}
+    status: dict[str, dict | None] = {}
+    for role in ROLE_IDS:
+        membership = memberships.get(f"{level}:{role}")
+        status[role] = _role_state(membership)
+        ratings[role] = _role_elo(membership)
+    return ratings, status
+
+
+def _role_state(membership: Membership | None) -> dict | None:
     if membership is None:
         return None
     return {"status": membership.status, "message": membership.error}
 
 
-def _role_elo(memberships, level: str, role: str) -> int | None:
-    membership = memberships.get(f"{level}:{role}")
-    if membership is None or membership.status not in {"provisional", "rated"}:
+def _role_elo(membership: Membership | None) -> int | None:
+    if membership is None or membership.status not in _PLACED:
         return None
     return round(membership.elo)
+
+
+def _standing(
+    resume: Resume,
+    overall: Membership | None,
+    people: list[Person],
+    *,
+    level: str,
+    elo: float,
+    placed: bool,
+) -> dict:
+    others = [
+        person.elo
+        for person in people
+        if person.placed and not person.synthetic and not person.tombstoned and person.id != resume.id
+    ]
+    me = Person(
+        id=resume.id,
+        elo=elo,
+        level=level,
+        industry=resume.industry or "other",
+        company=resume.company,
+        placed=placed,
+    )
+    cards, widened = neighbors_for(me, people) if placed else ([], False)
+    return {
+        "status": overall.status if overall else "placing",
+        "message": overall.error if overall and overall.error else None,
+        "band": band_label(elo),
+        "percentile": rounded_percentile(elo, others) if placed else None,
+        "histogram": histogram(people, level),
+        "neighbors": [_neighbor(card) for card in cards],
+        "widened": widened,
+        "matchesPlayed": overall.match_count if overall else 0,
+        "matchBudget": MATCH_BUDGET,
+    }
+
+
+def _shown_elo(ratings: dict, role: str):
+    score = ratings.get(role)
+    return ratings["overall"] if score is None else score
+
+
+def _category_duel(category_id: str, p_left: float, left_overall: float) -> dict:
+    p_b = 1 - p_left
+    return {
+        "id": category_id,
+        "pB": p_b,
+        "eloA": left_overall,
+        "eloB": round(_elo_from_base(left_overall, p_b)),
+    }
 
 
 def _neighbor(card: Neighbor) -> dict:

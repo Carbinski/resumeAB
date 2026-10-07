@@ -33,25 +33,19 @@ interface LadderState {
   setRole: (role: RoleId) => void;
   setUser: (user: Account | null) => void;
   upload: UploadStatus;
-  /** Holds a chosen file and asks for a name before anything is stored. */
   proposeFile: (file: File) => void;
-  /** Stores the pending file under the name the user confirmed. */
   confirmName: (label: string) => Promise<ResumeVersion | null>;
   cancelNaming: () => void;
-  /** Tombstones one resume and drops it from the history. */
   removeVersion: (id: string) => Promise<void>;
-  /** Publishes a lab draft onto the ladder. */
   addVersion: (version: ResumeVersion) => Promise<ResumeVersion | null>;
   resetUpload: () => void;
-  /** Opens the shared file dialog; the chosen file is rated and added to the history. */
   pickFile: () => void;
   refresh: () => Promise<void>;
   rateForRole: (role: Exclude<RoleId, "overall">) => Promise<void>;
   roleRun: RoleId | null;
   signOut: () => void;
-  /** A published or drafted résumé exists outside sample history. */
   hasLiveVersion: boolean;
-  /** Sample history is on screen. Live account data is kept and restored on exit. */
+  /** Sample history is on screen. Live account data stays and returns on exit. */
   demo: boolean;
   enterDemo: () => void;
   exitDemo: () => void;
@@ -81,6 +75,18 @@ function setDemoQuery(on: boolean) {
 
 function messageFrom(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+function appendIfNew(items: ResumeVersion[], version: ResumeVersion): ResumeVersion[] {
+  return items.some((item) => item.id === version.id) ? items : [...items, version];
+}
+
+function replaceVersion(items: ResumeVersion[], version: ResumeVersion): ResumeVersion[] {
+  return items.map((item) => (item.id === version.id ? version : item));
+}
+
+function upsertVersion(items: ResumeVersion[], version: ResumeVersion): ResumeVersion[] {
+  return items.some((item) => item.id === version.id) ? replaceVersion(items, version) : [...items, version];
 }
 
 function refreshedUpload(state: UploadStatus, next: ResumeVersion[]): UploadStatus {
@@ -225,9 +231,7 @@ export function LadderProvider({
           label: name,
         });
         pendingFile.current = null;
-        setLiveHistory((items) =>
-          items.some((item) => item.id === version.id) ? items : [...items, version],
-        );
+        setLiveHistory((items) => appendIfNew(items, version));
         setUpload({
           phase: "done",
           version,
@@ -269,11 +273,7 @@ export function LadderProvider({
     if (rejectDemo("Leave sample history before saving a version.")) return null;
     try {
       const published = await publishVersion(version.id);
-      setLiveHistory((items) =>
-        items.some((item) => item.id === published.id)
-          ? items.map((item) => (item.id === published.id ? published : item))
-          : [...items, published],
-      );
+      setLiveHistory((items) => upsertVersion(items, published));
       return published;
     } catch (error) {
       setUpload({ phase: "error", message: messageFrom(error, "Could not keep that version.") });
@@ -289,7 +289,7 @@ export function LadderProvider({
       setRoleRun(nextRole);
       try {
         const version = await rateRole(latest.id, nextRole);
-        setLiveHistory((items) => items.map((item) => (item.id === version.id ? version : item)));
+        setLiveHistory((items) => replaceVersion(items, version));
       } catch (error) {
         setUpload({ phase: "error", message: messageFrom(error, "Could not rate this role.") });
       } finally {

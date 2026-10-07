@@ -15,7 +15,7 @@ import { cn } from "@/lib/cn";
 import { trackVerdict } from "@/lib/elo";
 import { LABEL_MAX, labelFromFileName } from "@/lib/labels";
 import { placedTrackDelta } from "@/lib/ratings";
-import { ROLE_BY_ID, labRoleIds, stripTrackIds, type TrackId } from "@/lib/roles";
+import { ROLE_BY_ID, labRoleIds, stripTrackIds, type RoleId, type TrackId } from "@/lib/roles";
 import type { CompareResult, ResumeVersion } from "@/lib/types";
 import { Balance } from "../Balance";
 import { useLadder } from "../LadderProvider";
@@ -53,10 +53,89 @@ const RUN_STEPS = [
 
 const SECTION = "mx-auto max-w-[1180px] scroll-mt-24 px-5 pb-24 sm:px-8 md:pb-32";
 
+const UNRATED_ROLE = "This role has not been rated on both resumes.";
+
 interface StripRow {
   id: TrackId;
   pB: number;
   delta: number | null;
+}
+
+interface TrackStripState {
+  aId: string;
+  bId: string;
+  rows: StripRow[];
+}
+
+function demoChallenger(a: ResumeVersion): ResumeVersion {
+  return a.id === CLOUD_OPS_RESUME.id ? AI_ML_RESUME : CLOUD_OPS_RESUME;
+}
+
+function matchingResult(
+  result: CompareResult | null,
+  a: ResumeVersion,
+  b: ResumeVersion | null,
+  role: RoleId,
+): CompareResult | null {
+  if (!result || !b) return null;
+  if (result.a.id !== a.id || result.b.id !== b.id || result.role !== role) return null;
+  return result;
+}
+
+function viewPhase(stored: CompareResult | null, phase: Phase, live: CompareResult | null): Phase {
+  if (stored) return "result";
+  if (phase === "running") return "running";
+  return live ? "result" : "setup";
+}
+
+function viewScores(
+  stored: CompareResult | null,
+  phase: Phase,
+  pending: CompareResult | null,
+  live: CompareResult | null,
+): CompareResult | null {
+  if (stored) return stored;
+  if (phase === "running") return pending;
+  return live;
+}
+
+function stripRow(id: TrackId, pB: number, a: ResumeVersion, b: ResumeVersion): StripRow {
+  return { id, pB, delta: placedTrackDelta(a, b, id) };
+}
+
+function storedStripRows(
+  ids: TrackId[],
+  a: ResumeVersion,
+  b: ResumeVersion,
+  libraryIds: ReadonlySet<string>,
+): StripRow[] {
+  return ids.flatMap((id) => {
+    const stored = compareStoredScores(a, b, id, libraryIds);
+    return stored ? [stripRow(id, stored.pB, a, b)] : [];
+  });
+}
+
+function labHint(input: {
+  drafting: boolean;
+  challenger: ResumeVersion | null;
+  sameVersion: boolean;
+  demo: boolean;
+  roleUnrated: boolean;
+}): string {
+  if (input.drafting) return "Rating your edit…";
+  if (!input.challenger) {
+    return input.demo
+      ? "Sample history. Choose two versions. The comparison stays on this page."
+      : "Choose a baseline, then add the version you changed.";
+  }
+  if (input.sameVersion) return "Pick two different versions to compare.";
+  if (input.roleUnrated && input.demo) return UNRATED_ROLE;
+  if (input.demo) return "Ready. This uses the saved scores, not a live rating.";
+  return "Ready. Weigh A against B.";
+}
+
+function roleMissing(a: ResumeVersion, b: ResumeVersion, role: RoleId): boolean {
+  return a.ratings[role] == null || b.ratings[role] == null;
 }
 
 function TrackStrip({ rows }: { rows: StripRow[] }) {
@@ -151,12 +230,15 @@ function DraftDrop({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<{ file: File; suggested: string; token: number } | null>(null);
 
+  const leaveDemo = () => {
+    if (!demo) return false;
+    setError("Leave sample history before uploading.");
+    return true;
+  };
+
   const stage = (file: File | undefined) => {
     if (!file || busy) return;
-    if (demo) {
-      setError("Leave sample history before uploading.");
-      return;
-    }
+    if (leaveDemo()) return;
     if (!isSupportedResume(file.name)) {
       setError(`Use ${ACCEPTED_FORMATS.join(", ")}.`);
       return;
@@ -171,10 +253,7 @@ function DraftDrop({
 
   const confirm = async (label: string) => {
     if (!pending || busy) return;
-    if (demo) {
-      setError("Leave sample history before uploading.");
-      return;
-    }
+    if (leaveDemo()) return;
     const name = label.trim();
     if (!name) return;
     setError(null);
@@ -306,7 +385,7 @@ export function Lab() {
   const [result, setResult] = useState<CompareResult | null>(null);
   const [savedAs, setSavedAs] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [strip, setStrip] = useState<{ aId: string; bId: string; rows: StripRow[] } | null>(null);
+  const [strip, setStrip] = useState<TrackStripState | null>(null);
   const [stripBusy, setStripBusy] = useState(false);
   const [stripError, setStripError] = useState<string | null>(null);
 
@@ -318,35 +397,20 @@ export function Lab() {
     );
   }
 
-  // The role pair is only for the lab. Jordan Hale's history stays on the chart.
   const labVersions = demo ? [...history, CLOUD_OPS_RESUME, AI_ML_RESUME] : history;
   const libraryIds = new Set(labVersions.map((version) => version.id));
   const a = labVersions.find((version) => version.id === aId) ?? (demo ? AI_ML_RESUME : current);
-  const selectedChallenger = visibleChallenger(b, labVersions, draftId, demo);
   const challenger =
-    selectedChallenger ??
-    (demo ? (a.id === CLOUD_OPS_RESUME.id ? AI_ML_RESUME : CLOUD_OPS_RESUME) : null);
-  const ready = !!challenger && challenger.id !== a.id && !drafting;
+    visibleChallenger(b, labVersions, draftId, demo) ?? (demo ? demoChallenger(a) : null);
+  const sameVersion = !!challenger && challenger.id === a.id;
+  const ready = !!challenger && !sameVersion && !drafting;
   const bIsDraft = !!challenger && !libraryIds.has(challenger.id);
+  const roleUnrated = !!challenger && !sameVersion && roleMissing(a, challenger, role);
   const storedResult =
     ready && challenger ? compareStoredScores(a, challenger, role, libraryIds) : null;
-  const liveResult =
-    result &&
-    challenger &&
-    result.a.id === a.id &&
-    result.b.id === challenger.id &&
-    result.role === role
-      ? result
-      : null;
-  const shownResult = storedResult ?? liveResult;
-  const shownPhase: Phase = storedResult
-    ? "result"
-    : phase === "running"
-      ? "running"
-      : shownResult
-        ? "result"
-        : "setup";
-  const displayResult = storedResult ?? (phase === "running" ? result : liveResult);
+  const liveResult = matchingResult(result, a, challenger, role);
+  const shownPhase = viewPhase(storedResult, phase, liveResult);
+  const displayResult = viewScores(storedResult, phase, result, liveResult);
 
   const reset = () => {
     setPhase("setup");
@@ -357,7 +421,7 @@ export function Lab() {
   };
 
   const stripIds =
-    challenger && challenger.id !== a.id
+    challenger && !sameVersion
       ? stripTrackIds(demo, user?.focus, a.ratings, challenger.ratings)
       : [];
   const shownStrip =
@@ -367,12 +431,11 @@ export function Lab() {
     if (!challenger || stripBusy || stripIds.length === 0) return;
     setStripError(null);
     if (demo) {
-      const rows = stripIds.flatMap((id) => {
-        const stored = compareStoredScores(a, challenger, id, libraryIds);
-        if (!stored) return [];
-        return [{ id, pB: stored.pB, delta: placedTrackDelta(a, challenger, id) }];
+      setStrip({
+        aId: a.id,
+        bId: challenger.id,
+        rows: storedStripRows(stripIds, a, challenger, libraryIds),
       });
-      setStrip({ aId: a.id, bId: challenger.id, rows });
       return;
     }
     setStripBusy(true);
@@ -380,11 +443,7 @@ export function Lab() {
       const rows: StripRow[] = [];
       for (const id of stripIds) {
         const outcome = await compareVersions(a, challenger, id);
-        rows.push({
-          id,
-          pB: outcome.pB,
-          delta: placedTrackDelta(a, challenger, id),
-        });
+        rows.push(stripRow(id, outcome.pB, a, challenger));
       }
       setStrip({ aId: a.id, bId: challenger.id, rows });
     } catch (caught) {
@@ -394,7 +453,6 @@ export function Lab() {
     }
   };
 
-  /** Brings the scale and its verdict into view, only if they are not already. */
   const frameStage = () => {
     const node = stageRef.current;
     if (!node) return;
@@ -412,8 +470,8 @@ export function Lab() {
     setError(null);
     frameStage();
     if (demo) {
-      if (a.ratings[role] == null || challenger.ratings[role] == null) {
-        setError("This role has not been rated on both resumes.");
+      if (roleMissing(a, challenger, role)) {
+        setError(UNRATED_ROLE);
         setPhase("setup");
         return;
       }
@@ -446,23 +504,7 @@ export function Lab() {
     reset();
   };
 
-  const roleUnrated =
-    !!challenger &&
-    challenger.id !== a.id &&
-    (a.ratings[role] == null || challenger.ratings[role] == null);
-  const hint = drafting
-    ? "Rating your edit…"
-    : !challenger
-      ? demo
-        ? "Sample history. Choose two versions. The comparison stays on this page."
-        : "Choose a baseline, then add the version you changed."
-      : challenger.id === a.id
-        ? "Pick two different versions to compare."
-        : roleUnrated && demo
-          ? "This role has not been rated on both resumes."
-          : demo
-            ? "Ready. This uses the saved scores, not a live rating."
-            : "Ready. Weigh A against B.";
+  const hint = labHint({ drafting, challenger, sameVersion, demo, roleUnrated });
 
   return (
     <section id="lab" className={SECTION}>
@@ -605,8 +647,6 @@ export function Lab() {
                 value={role}
                 onChange={(r) => {
                   setRole(r);
-                  // Clears a live judge result. A comparison that can be derived
-                  // from stored scores is computed above and stays on screen.
                   reset();
                 }}
               />
