@@ -1,11 +1,15 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from resume_ab.api import create_app
 from resume_ab.cohort import MATCH_BUDGET
+from resume_ab.place import _elo_after, _select_category_anchor
 from resume_ab.store import Store
 from tests.fakes import ScriptedJudge
+
+CATEGORIES = {"impact", "depth", "leadership", "fit", "trajectory", "clarity"}
 
 RESUME = """Ada Lovelace
 ada.lovelace@example.test
@@ -79,13 +83,15 @@ def test_upload_redacts_before_the_judge_and_stays_under_the_match_budget(tmp_pa
     assert body["standing"]["status"] == "rated"
     assert 1 <= body["standing"]["matchesPlayed"] <= MATCH_BUDGET
     assert body["standing"]["band"]
-    assert body["categories"] == {}
+    assert set(body["categories"]) == CATEGORIES
     assert "ada.lovelace@example.test" not in response.text
     assert "555-0199" not in response.text
 
-    assert judge.calls
-    assert len(judge.calls) <= MATCH_BUDGET
-    assert all(not categories for _left, _right, categories in judge.calls)
+    pool_calls = [call for call in judge.calls if not call[2]]
+    category_calls = [call for call in judge.calls if call[2]]
+    assert 1 <= len(pool_calls) <= MATCH_BUDGET
+    assert len(category_calls) == 1
+    assert all(not categories for _left, _right, categories in pool_calls)
     blob = "\n".join(judge.seen)
     assert "ada.lovelace@example.test" not in blob
     assert "Ada Lovelace" not in blob
@@ -101,6 +107,94 @@ def test_upload_redacts_before_the_judge_and_stays_under_the_match_budget(tmp_pa
     redacted_log = caplog.text.split("redacted", 1)[1]
     assert "ada.lovelace@example.test" not in redacted_log
     assert "Northwind Labs" in redacted_log
+
+
+def test_first_version_scores_categories_and_the_second_moves_them(tmp_path: Path):
+    client, judge, store = _client(tmp_path)
+    _signup(client, "ada@example.test", "Northwind")
+    first = client.post(
+        "/versions",
+        files={"file": ("one.txt", RESUME.encode(), "text/plain")},
+        data={"draft": "false"},
+    )
+    assert first.status_code == 200, first.text
+    body = first.json()
+    resume_id = body["id"]
+    stored = store.get_resume(resume_id)
+    assert stored is not None and stored.user_id is not None
+    assert store.previous_published(stored.user_id, stored.created_at) is None
+    assert set(body["categories"]) == CATEGORIES
+
+    membership = store.memberships_for(resume_id)["intern"]
+    scores = store.category_scores(resume_id)
+    assert set(scores) == CATEGORIES
+    for category_id, elo in scores.items():
+        assert elo == pytest.approx(_elo_after(membership.elo, judge.probability))
+        assert body["categories"][category_id] == round(elo)
+
+    category_calls = [call for call in judge.calls if call[2]]
+    assert len(category_calls) == 1
+    left, right, _categories = category_calls[0]
+    assert left == stored.redacted_text
+    anchors = [
+        candidate
+        for candidate in store.candidates("intern")
+        if candidate.anchor_slot is not None
+    ]
+    expected = _select_category_anchor(anchors, membership.elo)
+    assert expected is not None
+    anchor = store.get_resume(expected.id)
+    assert anchor is not None and anchor.is_synthetic
+    assert right == anchor.redacted_text
+    assert right != stored.redacted_text
+
+    calls_after_first = len(judge.calls)
+    second = client.post(
+        "/versions",
+        files={"file": ("two.txt", SECOND.encode(), "text/plain")},
+        data={"note": "Added a metric", "draft": "false"},
+    )
+    assert second.status_code == 200, second.text
+    later = second.json()
+    assert later["label"] == "v2"
+    assert set(later["categories"]) == CATEGORIES
+    second_resume = store.get_resume(later["id"])
+    assert second_resume is not None and second_resume.redacted_text is not None
+    moved = store.category_scores(later["id"])
+    assert set(moved) == CATEGORIES
+    for category_id, elo in moved.items():
+        assert elo == pytest.approx(_elo_after(scores[category_id], judge.probability))
+        assert later["categories"][category_id] == round(elo)
+        assert later["categories"][category_id] != body["categories"][category_id]
+
+    second_category_calls = [call for call in judge.calls[calls_after_first:] if call[2]]
+    assert len(second_category_calls) == 1
+    assert second_category_calls[0][0] == second_resume.redacted_text
+    assert second_category_calls[0][1] == stored.redacted_text
+    assert len(judge.calls) - calls_after_first <= MATCH_BUDGET + 1
+
+
+class _CategoryFailJudge(ScriptedJudge):
+    def compare(self, left, right, role_description, *, categories: bool = False):
+        if categories:
+            raise RuntimeError("category judge failed")
+        return super().compare(left, right, role_description, categories=categories)
+
+
+def test_category_failure_leaves_a_rated_version_without_scores(tmp_path: Path):
+    store = Store(tmp_path / "ladder.db", tmp_path / "blobs")
+    store.seed_anchors()
+    client = TestClient(create_app(store, _CategoryFailJudge(), sync=True))
+    _signup(client, "ada@example.test", "Northwind")
+    response = client.post(
+        "/versions",
+        files={"file": ("resume.txt", RESUME.encode(), "text/plain")},
+        data={"draft": "false"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["standing"]["status"] == "rated"
+    assert body["categories"] == {}
 
 
 def test_second_version_learns_categories_and_a_unique_company_is_visible(tmp_path: Path):
