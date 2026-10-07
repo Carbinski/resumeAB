@@ -33,13 +33,32 @@ export function Account() {
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const blockDemo = (message: string) => {
+    if (!demo) return false;
+    setError(message);
+    return true;
+  };
+
+  const run = async (action: () => Promise<void>, fallback: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : fallback);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submit = async () => {
-    if (demo) {
-      setError(
+    if (
+      blockDemo(
         mode === "login"
           ? "Leave sample history before logging in."
           : "Leave sample history before creating an account.",
-      );
+      )
+    ) {
       return;
     }
     if (password.length < 8) {
@@ -54,9 +73,7 @@ export function Account() {
       setError("Pick an industry from the list.");
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
+    await run(async () => {
       const account =
         mode === "login"
           ? await login(email, password)
@@ -64,50 +81,38 @@ export function Account() {
       setUser(account);
       setPassword("");
       await refresh();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save that account.");
-    } finally {
-      setBusy(false);
-    }
+    }, "Could not save that account.");
   };
 
   const saveProfile = async () => {
-    if (demo) {
-      setError("Leave sample history before changing your account.");
-      return;
-    }
+    if (blockDemo("Leave sample history before changing your account.")) return;
     if (!isCurrentIndustry(industry)) {
       setError("Pick an industry from the list.");
       return;
     }
-    setBusy(true);
-    setError(null);
-    try {
-      const account = await updateProfile({ nameOnResume, level, industry, company });
-      setUser(account);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not update your profile.");
-    } finally {
-      setBusy(false);
-    }
+    await run(async () => {
+      setUser(await updateProfile({ nameOnResume, level, industry, company }));
+    }, "Could not update your profile.");
   };
 
   const remove = async () => {
-    if (demo) {
-      setError("Leave sample history before deleting an account.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
+    if (blockDemo("Leave sample history before deleting an account.")) return;
+    await run(async () => {
       await deleteAccount();
       signOut();
       setConfirmDelete(false);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not delete the account.");
-    } finally {
-      setBusy(false);
-    }
+    }, "Could not delete the account.");
+  };
+
+  const profileFields = {
+    nameOnResume,
+    setNameOnResume,
+    level,
+    setLevel,
+    industry,
+    setIndustry,
+    company,
+    setCompany,
   };
 
   return (
@@ -142,16 +147,7 @@ export function Account() {
           }}
         >
         {user ? (
-          <ProfileFields
-            nameOnResume={nameOnResume}
-            setNameOnResume={setNameOnResume}
-            level={level}
-            setLevel={setLevel}
-            industry={industry}
-            setIndustry={setIndustry}
-            company={company}
-            setCompany={setCompany}
-          />
+          <ProfileFields {...profileFields} />
         ) : (
           <>
             <div className="mt-5 flex gap-2">
@@ -187,16 +183,7 @@ export function Account() {
               />
             </div>
             {mode === "signup" ? (
-              <ProfileFields
-                nameOnResume={nameOnResume}
-                setNameOnResume={setNameOnResume}
-                level={level}
-                setLevel={setLevel}
-                industry={industry}
-                setIndustry={setIndustry}
-                company={company}
-                setCompany={setCompany}
-              />
+              <ProfileFields {...profileFields} />
             ) : null}
           </>
         )}
