@@ -6,13 +6,16 @@ export const LEVELS = [
 export type LevelId = (typeof LEVELS)[number]["id"];
 
 export const INDUSTRIES = [
+  { id: "aerospace", label: "Aerospace" },
+  { id: "defense", label: "Defense" },
   { id: "software", label: "Software" },
-  { id: "finance", label: "Finance" },
+  { id: "robotics", label: "Robotics" },
   { id: "consulting", label: "Consulting" },
+  { id: "finance", label: "Finance" },
+  { id: "biotech", label: "Biotech" },
   { id: "healthcare", label: "Healthcare" },
-  { id: "hardware", label: "Hardware" },
-  { id: "government", label: "Government" },
-  { id: "other", label: "Other" },
+  { id: "manufacturing", label: "Manufacturing" },
+  { id: "automation", label: "Automation" },
 ] as const;
 
 export function levelLabel(id: string): string {

@@ -9,6 +9,17 @@ import { Button } from "./ui/Button";
 const fieldClass =
   "w-full rounded-2xl border border-bark/15 bg-cream/70 px-4 py-3 text-[0.92rem] text-ink outline-none transition-colors placeholder:text-taupe focus:border-clay";
 
+const selectClass = `${fieldClass} appearance-none pr-11 [-webkit-appearance:none] [color-scheme:light]`;
+
+function isCurrentIndustry(id: string): boolean {
+  return INDUSTRIES.some((item) => item.id === id);
+}
+
+function retiredIndustryLabel(id: string): string {
+  if (!id) return "Choose an industry";
+  return id.charAt(0).toUpperCase() + id.slice(1);
+}
+
 export function Account() {
   const { user, setUser, offline, refresh, signOut } = useLadder();
   const [mode, setMode] = useState<"signup" | "login">("signup");
@@ -31,6 +42,10 @@ export function Account() {
       setError("Enter the name as it appears on your resume.");
       return;
     }
+    if (mode === "signup" && !isCurrentIndustry(industry)) {
+      setError("Pick an industry from the list.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -49,6 +64,10 @@ export function Account() {
   };
 
   const saveProfile = async () => {
+    if (!isCurrentIndustry(industry)) {
+      setError("Pick an industry from the list.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -82,11 +101,11 @@ export function Account() {
         <h2 className="font-display mt-2 text-[2rem] leading-none text-ink">
           {user ? "Your profile" : "Create an account"}
         </h2>
-        <p className="mt-3 text-[0.9rem] leading-relaxed text-olive">
-          {user
-            ? "Level and industry decide who appears around you. Company is shown on your anonymous card."
-            : "Intern and new grad only. The name is used to strip it from the resume before anything is scored."}
-        </p>
+        {user ? (
+          <p className="mt-3 text-[0.9rem] leading-relaxed text-olive">
+            Level and industry decide who appears around you. Company is shown on your anonymous card.
+          </p>
+        ) : null}
         {offline ? (
           <p className="mt-3 text-[0.86rem] text-clay" role="status">
             The rating service is not running.
@@ -228,15 +247,22 @@ function ProfileFields({
 }) {
   return (
     <div className="mt-4 grid gap-3">
-      <label className="grid gap-1.5 text-[0.78rem] text-olive">
-        Name as it appears on your resume
+      <div className="grid gap-1.5">
+        <label htmlFor="name-on-resume" className="text-[0.78rem] text-olive">
+          Name as it appears on your resume
+        </label>
+        <p id="name-on-resume-hint" className="text-[0.86rem] leading-relaxed text-olive">
+          This name is removed from the file before scoring so the rating is about the work.
+        </p>
         <input
+          id="name-on-resume"
           className={fieldClass}
           value={nameOnResume}
           onChange={(event) => setNameOnResume(event.target.value)}
           autoComplete="name"
+          aria-describedby="name-on-resume-hint"
         />
-      </label>
+      </div>
       <div className="flex gap-2">
         {LEVELS.map((item) => (
           <button
@@ -253,17 +279,38 @@ function ProfileFields({
       </div>
       <label className="grid gap-1.5 text-[0.78rem] text-olive">
         Industry
-        <select
-          className={fieldClass}
-          value={industry}
-          onChange={(event) => setIndustry(event.target.value)}
-        >
-          {INDUSTRIES.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+        <span className="relative block">
+          <select
+            className={selectClass}
+            value={industry}
+            onChange={(event) => setIndustry(event.target.value)}
+          >
+            {isCurrentIndustry(industry) ? null : (
+              <option value={industry} disabled className="bg-cream text-ink">
+                {retiredIndustryLabel(industry)}
+              </option>
+            )}
+            {INDUSTRIES.map((item) => (
+              <option key={item.id} value={item.id} className="bg-cream text-ink">
+                {item.label}
+              </option>
+            ))}
+          </select>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 20 20"
+            className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-olive"
+            fill="none"
+          >
+            <path
+              d="M5 7.5 10 12.5 15 7.5"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
       </label>
       <label className="grid gap-1.5 text-[0.78rem] text-olive">
         Most recent company

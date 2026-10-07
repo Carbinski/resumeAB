@@ -8,22 +8,28 @@ LEVELS = ("intern", "newgrad")
 LEVEL_LABELS = {"intern": "Intern", "newgrad": "New grad"}
 
 INDUSTRIES = (
+    "aerospace",
+    "defense",
     "software",
-    "finance",
+    "robotics",
     "consulting",
+    "finance",
+    "biotech",
     "healthcare",
-    "hardware",
-    "government",
-    "other",
+    "manufacturing",
+    "automation",
 )
 INDUSTRY_LABELS = {
+    "aerospace": "Aerospace",
+    "defense": "Defense",
     "software": "Software",
-    "finance": "Finance",
+    "robotics": "Robotics",
     "consulting": "Consulting",
+    "finance": "Finance",
+    "biotech": "Biotech",
     "healthcare": "Healthcare",
-    "hardware": "Hardware",
-    "government": "Government",
-    "other": "Other",
+    "manufacturing": "Manufacturing",
+    "automation": "Automation",
 }
 
 # (inclusive lower bound, exclusive upper bound, label). The last band is open.
