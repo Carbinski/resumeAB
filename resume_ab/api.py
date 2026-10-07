@@ -203,6 +203,7 @@ def create_app(
         file: UploadFile = File(...),
         note: str = Form(""),
         draft: str = Form("false"),
+        label: str = Form(""),
         user: User = Depends(current_user),
     ) -> dict:
         filename = Path(file.filename or "resume.txt").name
@@ -243,10 +244,17 @@ def create_app(
             suffix=suffix or ".txt",
             note=note.strip()[:500],
             published=not is_draft,
+            label=label,
         )
         if resume.published:
             _start_overall(store, spawn, resume)
         return version_payload(store, store.get_resume(resume.id) or resume)
+
+    @app.delete("/versions/{resume_id}")
+    def delete_version(resume_id: str, user: User = Depends(current_user)) -> dict:
+        if not store.delete_resume(user.id, resume_id):
+            raise HTTPException(status_code=404, detail="Résumé not found.")
+        return {"ok": True}
 
     @app.post("/versions/{resume_id}/publish")
     def publish(resume_id: str, user: User = Depends(current_user)) -> dict:

@@ -242,8 +242,8 @@ function OrbitStage({ dragging }: { dragging: boolean }) {
 }
 
 export function Hero() {
-  const { rateFile, pickFile } = useLadder();
-  const dragging = useWindowFileDrop((file) => void rateFile(file));
+  const { proposeFile, pickFile } = useLadder();
+  const dragging = useWindowFileDrop((file) => proposeFile(file));
 
   return (
     <section id="top" className="grain relative overflow-hidden">

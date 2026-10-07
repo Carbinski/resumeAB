@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ROLES, ROLE_BY_ID } from "@/lib/roles";
 import { Anatomy } from "../Anatomy";
 import { EloChart } from "../EloChart";
+import { ResumeLibrary } from "../ResumeLibrary";
 import { useLadder } from "../LadderProvider";
 import { Standing } from "./Standing";
 import { Button } from "../ui/Button";
@@ -23,7 +24,7 @@ const RANGES = [
 ] as const;
 
 export function Rating() {
-  const { history, role, setRole, rateForRole, roleRun } = useLadder();
+  const { history, role, setRole, rateForRole, roleRun, removeVersion } = useLadder();
   const [range, setRange] = useState<Range>("all");
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -178,6 +179,13 @@ export function Rating() {
           <Anatomy version={active} before={before} role={role} />
         </Reveal>
       </div>
+      <ResumeLibrary
+        versions={history}
+        onRemove={async (id) => {
+          await removeVersion(id);
+          setActiveId((current) => (current === id ? null : current));
+        }}
+      />
       <Standing version={active} />
     </section>
   );

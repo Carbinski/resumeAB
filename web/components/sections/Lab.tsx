@@ -6,10 +6,12 @@ import { useRef, useState } from "react";
 import { compareVersions, isSupportedResume, uploadResume } from "@/lib/api";
 import { ACCEPTED_FORMATS } from "@/lib/brand";
 import { cn } from "@/lib/cn";
+import { LABEL_MAX, labelFromFileName } from "@/lib/labels";
 import { ROLES } from "@/lib/roles";
 import type { CompareResult, ResumeVersion } from "@/lib/types";
 import { Balance } from "../Balance";
 import { useLadder } from "../LadderProvider";
+import { ResumeNameForm } from "../ResumeNameForm";
 import { Duels, PositionCheck, Verdict } from "../Results";
 import { Button, Magnetic } from "../ui/Button";
 import { EASE, Reveal } from "../ui/Reveal";
@@ -83,25 +85,39 @@ function DraftDrop({
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ file: File; suggested: string; token: number } | null>(null);
 
-  const handle = async (file: File | undefined) => {
+  const stage = (file: File | undefined) => {
     if (!file || busy) return;
     if (!isSupportedResume(file.name)) {
       setError(`Use ${ACCEPTED_FORMATS.join(", ")}.`);
       return;
     }
     setError(null);
+    setPending((current) => ({
+      file,
+      suggested: labelFromFileName(file.name),
+      token: (current?.token ?? 0) + 1,
+    }));
+  };
+
+  const confirm = async (label: string) => {
+    if (!pending || busy) return;
+    const name = label.trim();
+    if (!name) return;
+    setError(null);
     setBusy(true);
     onBusy(true);
     try {
       onDraft(
-        await uploadResume(file, {
+        await uploadResume(pending.file, {
           baseline,
-          label: "Draft",
+          label: name.slice(0, LABEL_MAX),
           note: "Draft from the A/B lab.",
           draft: true,
         }),
       );
+      setPending(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed.");
     } finally {
@@ -121,35 +137,58 @@ function DraftDrop({
       onDrop={(e) => {
         e.preventDefault();
         setOver(false);
-        void handle(e.dataTransfer.files?.[0]);
+        stage(e.dataTransfer.files?.[0]);
       }}
       className={cn(
-        "flex h-[76px] items-center justify-between gap-4 rounded-[20px] border border-dashed px-5 transition-colors duration-300",
-        over ? "border-clay bg-blush/40" : "border-bark/25 bg-cream/50",
+        "rounded-[20px] border border-dashed px-5 transition-colors duration-300",
+        pending ? "py-4" : "flex h-[76px] items-center justify-between gap-4",
+        over && !pending ? "border-clay bg-blush/40" : "border-bark/25 bg-cream/50",
       )}
     >
-      <div className="min-w-0">
-        <p className="truncate text-[0.95rem] text-ink">
-          {busy ? "Rating your edit…" : over ? "Release to add as B" : "Drop the edited version"}
-        </p>
-        {error ? (
-          <p role="alert" className="truncate text-[0.74rem] text-clay">
-            {error}
-          </p>
-        ) : (
-          <p className="truncate font-mono text-[0.66rem] uppercase tracking-[0.14em] text-olive">
-            {ACCEPTED_FORMATS.map((f) => f.slice(1)).join(" · ")}
-          </p>
-        )}
-      </div>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => inputRef.current?.click()}
-        className="shrink-0 rounded-full border border-bark/20 px-4 py-2 text-[0.82rem] text-ink transition-colors hover:bg-white/70 disabled:opacity-50"
-      >
-        Browse
-      </button>
+      {pending ? (
+        <div>
+          <ResumeNameForm
+            key={pending.token}
+            fileName={pending.file.name}
+            suggested={pending.suggested}
+            submitLabel={busy ? "Adding…" : "Add draft"}
+            busy={busy}
+            onConfirm={(label) => void confirm(label)}
+            onCancel={() => {
+              if (!busy) setPending(null);
+            }}
+          />
+          {error ? (
+            <p role="alert" className="mt-2 truncate text-[0.74rem] text-clay">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          <div className="min-w-0">
+            <p className="truncate text-[0.95rem] text-ink">
+              {over ? "Release to add as B" : "Drop the edited version"}
+            </p>
+            {error ? (
+              <p role="alert" className="truncate text-[0.74rem] text-clay">
+                {error}
+              </p>
+            ) : (
+              <p className="truncate font-mono text-[0.66rem] uppercase tracking-[0.14em] text-olive">
+                {ACCEPTED_FORMATS.map((f) => f.slice(1)).join(" · ")}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="shrink-0 rounded-full border border-bark/20 px-4 py-2 text-[0.82rem] text-ink transition-colors hover:bg-white/70"
+          >
+            Browse
+          </button>
+        </>
+      )}
       <input
         ref={inputRef}
         type="file"
@@ -158,7 +197,7 @@ function DraftDrop({
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
-          void handle(file);
+          stage(file);
         }}
       />
     </div>
@@ -429,9 +468,9 @@ export function Lab() {
                 <p role="status" className="rounded-full bg-peach px-5 py-3 text-[0.9rem] text-bark">
                   Saved as {savedAs}. It now counts toward your ELO history.
                 </p>
-              ) : bIsDraft ? (
-                <Button variant="ink" onClick={() => void keep()}>
-                  Keep B as v{history.length + 1}
+              ) : b && bIsDraft ? (
+                <Button variant="ink" onClick={() => void keep()} className="max-w-full">
+                  <span className="max-w-[18rem] truncate">Keep {b.label}</span>
                 </Button>
               ) : null}
               <Button variant="outline" onClick={backToStage}>

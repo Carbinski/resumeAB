@@ -105,8 +105,20 @@ CREATE TABLE IF NOT EXISTS comparisons (
 """
 
 
+_LABEL_LIMIT = 80
+_DRAFT_LABEL = "Draft"
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _clean_label(label: str | None) -> str | None:
+    """A user-supplied name, stripped and capped. Blank is not a name."""
+    if label is None:
+        return None
+    cleaned = label.strip()[:_LABEL_LIMIT]
+    return cleaned or None
 
 
 def hash_password(password: str) -> str:
@@ -441,9 +453,15 @@ class Store:
         suffix: str,
         note: str,
         published: bool,
+        label: str | None = None,
     ) -> tuple[Resume, bool]:
-        """Returns the résumé and whether this call created it."""
+        """Returns the résumé and whether this call created it.
+
+        ``label`` is the name the user typed. When it is missing, a published
+        résumé still falls back to ``vN`` and a draft to ``Draft``.
+        """
         digest = content_sha256(redacted_text)
+        provided = _clean_label(label)
         with self._lock:
             existing = self._conn.execute(
                 """
@@ -455,10 +473,10 @@ class Store:
             if existing is not None:
                 resume = _resume(existing)
                 if published and not resume.published:
-                    label = self._next_label(user.id)
+                    stored_label = provided or self._label_or_next(user.id, resume.label)
                     self._conn.execute(
                         "UPDATE resumes SET published = 1, label = ?, note = ? WHERE id = ?",
-                        (label, note or resume.note, resume.id),
+                        (stored_label, note or resume.note, resume.id),
                     )
                     self._conn.commit()
                     return self._resume_by_id(resume.id), False
@@ -467,7 +485,13 @@ class Store:
             resume_id = uuid.uuid4().hex
             blob = self.blob_dir / f"{resume_id}{suffix}"
             blob.write_bytes(file_bytes)
-            label = self._next_label(user.id) if published else "Draft"
+            if provided:
+                stored_label = provided
+            elif published:
+                stored_label = self._next_label(user.id)
+            else:
+                stored_label = _DRAFT_LABEL
+            label = stored_label
             self._conn.execute(
                 """
                 INSERT INTO resumes (
@@ -507,13 +531,39 @@ class Store:
             resume = _resume(row)
             if resume.published:
                 return resume
-            label = self._next_label(user_id)
+            label = self._label_or_next(user_id, resume.label)
             self._conn.execute(
                 "UPDATE resumes SET published = 1, label = ? WHERE id = ?",
                 (label, resume_id),
             )
             self._conn.commit()
             return self._resume_by_id(resume_id)
+
+    def delete_resume(self, user_id: str, resume_id: str) -> bool:
+        """Tombstone one résumé owned by ``user_id``.
+
+        The file and extracted text go away. Match rows stay so other ratings
+        still stand. Synthetic anchors and other people's résumés are refused.
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT user_id, is_synthetic, file_path, tombstoned FROM resumes WHERE id = ?",
+                (resume_id,),
+            ).fetchone()
+            if row is None or row["is_synthetic"] or row["user_id"] != user_id or row["tombstoned"]:
+                return False
+            self._unlink(row["file_path"])
+            self._conn.execute(
+                """
+                UPDATE resumes
+                SET redacted_text = NULL, file_path = NULL, purged = 1, tombstoned = 1,
+                    company = NULL, file_name = NULL, note = ''
+                WHERE id = ? AND user_id = ? AND is_synthetic = 0
+                """,
+                (resume_id, user_id),
+            )
+            self._conn.commit()
+            return True
 
     def list_published(self, user_id: str) -> list[Resume]:
         with self._lock:
@@ -748,6 +798,13 @@ class Store:
             (user_id,),
         ).fetchone()["n"]
         return f"v{count + 1}"
+
+    def _label_or_next(self, user_id: str, current: str | None) -> str:
+        """Keep a stored name. Only a blank label falls back to ``vN``."""
+        kept = _clean_label(current)
+        if kept:
+            return kept
+        return self._next_label(user_id)
 
     def _purge_overflow(self, user_id: str, *, keep: int) -> None:
         rows = self._conn.execute(

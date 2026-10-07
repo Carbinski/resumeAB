@@ -3,6 +3,7 @@
  * Calls go to `/api/ladder`, which proxies the Python service.
  */
 import { ACCEPTED_FORMATS } from "./brand";
+import { LABEL_MAX } from "./labels";
 import type { RoleId } from "./roles";
 import type { Account, CompareResult, ResumeVersion } from "./types";
 
@@ -79,6 +80,10 @@ export function deleteAccount(): Promise<{ ok: boolean }> {
   return request("/me", { method: "DELETE" });
 }
 
+export function deleteVersion(id: string): Promise<{ ok: boolean }> {
+  return request(`/versions/${id}`, { method: "DELETE" });
+}
+
 export interface UploadOptions {
   /** The version the new one is rated against. Unused by the service; kept for the lab call site. */
   baseline?: ResumeVersion;
@@ -97,6 +102,8 @@ export async function uploadResume(file: File, options: UploadOptions = {}): Pro
   body.append("file", file);
   body.append("note", options.note ?? "");
   body.append("draft", options.draft ? "true" : "false");
+  const label = options.label?.trim().slice(0, LABEL_MAX) ?? "";
+  if (label) body.append("label", label);
   const created = await request<ResumeVersion>("/versions", { method: "POST", body });
   if (options.draft) return created;
   return waitForVersion(created.id, (version) => version.standing.status !== "placing");

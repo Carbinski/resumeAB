@@ -7,6 +7,7 @@ import { ACCEPTED_FORMATS } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { formatDelta } from "@/lib/elo";
 import { useLadder } from "./LadderProvider";
+import { ResumeNameForm } from "./ResumeNameForm";
 import { DeltaChip } from "./ui/DeltaChip";
 import { StepTicker } from "./ui/StepTicker";
 
@@ -38,7 +39,7 @@ function Slot({ active, children }: { active: boolean; children: ReactNode }) {
 }
 
 export function Dropzone({ dragging }: { dragging: boolean }) {
-  const { upload, pickFile, resetUpload } = useLadder();
+  const { upload, pickFile, resetUpload, confirmName, cancelNaming } = useLadder();
   const lenis = useLenis();
 
   const viewRating = () => {
@@ -52,7 +53,7 @@ export function Dropzone({ dragging }: { dragging: boolean }) {
         animate={{ scale: dragging ? 1.025 : 1 }}
         transition={{ type: "spring", stiffness: 260, damping: 22 }}
         className={cn(
-          "glass relative grid min-h-[132px] overflow-hidden rounded-[28px] border-dashed p-1.5 transition-colors duration-300 sm:min-h-[96px]",
+          "glass relative grid min-h-[168px] overflow-hidden rounded-[28px] border-dashed p-1.5 transition-colors duration-300 sm:min-h-[132px]",
           dragging && "!border-clay bg-white/90",
         )}
       >
@@ -90,9 +91,24 @@ export function Dropzone({ dragging }: { dragging: boolean }) {
           </div>
         </Slot>
 
+        <Slot active={upload.phase === "naming"}>
+          {upload.phase === "naming" ? (
+            <ResumeNameForm
+              key={`${upload.fileName}:${upload.suggested}`}
+              fileName={upload.fileName}
+              suggested={upload.suggested}
+              submitLabel="Rate this resume"
+              onConfirm={(label) => void confirmName(label)}
+              onCancel={cancelNaming}
+            />
+          ) : (
+            <div className="h-24" />
+          )}
+        </Slot>
+
         <Slot active={upload.phase === "processing"}>
           <p className="truncate font-mono text-[0.72rem] text-olive">
-            {upload.phase === "processing" ? upload.fileName : "\u00a0"}
+            {upload.phase === "processing" ? `${upload.label} · ${upload.fileName}` : "\u00a0"}
           </p>
           {upload.phase === "processing" ? (
             <StepTicker steps={PROCESSING_STEPS} intervalMs={650} showCount className="mt-1" />

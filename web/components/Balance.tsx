@@ -81,7 +81,7 @@ function Pan({
           !version && !pending && "border-dashed",
         )}
       >
-        <p className="font-mono text-[0.64rem] uppercase tracking-[0.16em] text-olive">
+        <p className="w-full truncate px-2 font-mono text-[0.64rem] uppercase tracking-[0.16em] text-olive">
           {tag}
           {version ? ` · ${version.label}` : ""}
         </p>
