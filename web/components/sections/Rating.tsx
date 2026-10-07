@@ -41,7 +41,7 @@ export function Rating() {
   const chartVersions = versions.filter((version) => version.ratings[role] != null);
   if (history.length === 0) {
     return (
-      <section id="rating" className="mx-auto max-w-[1180px] px-5 py-20 sm:px-8 md:py-28">
+      <section id="rating" className="mx-auto max-w-[1180px] scroll-mt-24 px-5 py-20 sm:px-8 md:py-28">
         <SectionHeader
           index="02"
           label="Your rating"
@@ -66,7 +66,7 @@ export function Rating() {
   const totalGain = active.ratings.overall - first.ratings.overall;
 
   return (
-    <section id="rating" className="mx-auto max-w-[1180px] px-5 py-20 sm:px-8 md:py-28">
+    <section id="rating" className="mx-auto max-w-[1180px] scroll-mt-24 px-5 py-20 sm:px-8 md:py-28">
       <SectionHeader
         index="02"
         label="Your rating"

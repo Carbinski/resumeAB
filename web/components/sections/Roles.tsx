@@ -247,7 +247,7 @@ export function Roles() {
   const highlightId = useId();
 
   return (
-    <section id="roles" className="mx-auto max-w-[1180px] px-5 pb-20 sm:px-8 md:pb-28">
+    <section id="roles" className="mx-auto max-w-[1180px] scroll-mt-24 px-5 pb-20 sm:px-8 md:pb-28">
       <SectionHeader
         index="03"
         label="Role lens"

@@ -242,7 +242,7 @@ export function Lab() {
 
   if (!current) {
     return (
-      <section id="lab" className="mx-auto max-w-[1180px] px-5 pb-24 sm:px-8 md:pb-32">
+      <section id="lab" className="mx-auto max-w-[1180px] scroll-mt-24 px-5 pb-24 sm:px-8 md:pb-32">
         <SectionHeader
           index="04"
           label="A/B lab"
@@ -328,7 +328,7 @@ export function Lab() {
           : "Ready. Weigh A against B.";
 
   return (
-    <section id="lab" className="mx-auto max-w-[1180px] px-5 pb-24 sm:px-8 md:pb-32">
+    <section id="lab" className="mx-auto max-w-[1180px] scroll-mt-24 px-5 pb-24 sm:px-8 md:pb-32">
       <SectionHeader
         index="04"
         label="A/B lab"

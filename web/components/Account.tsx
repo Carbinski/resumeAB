@@ -111,7 +111,7 @@ export function Account() {
   };
 
   return (
-    <section id="account" className="mx-auto max-w-[720px] px-5 pb-8 sm:px-8">
+    <section id="account" className="mx-auto max-w-[720px] scroll-mt-24 px-5 pb-8 sm:px-8">
       <div className="rounded-[32px] border border-bark/10 bg-white/40 p-5 sm:p-7">
         <p className="text-[0.72rem] font-medium uppercase tracking-[0.18em] text-olive">Account</p>
         <h2 className="font-display mt-2 text-[2rem] leading-none text-ink">
