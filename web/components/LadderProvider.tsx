@@ -77,6 +77,23 @@ function setDemoQuery(on: boolean) {
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function messageFrom(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function refreshedUpload(state: UploadStatus, next: ResumeVersion[]): UploadStatus {
+  if (state.phase !== "done") return state;
+  const updated = next.find((version) => version.id === state.version.id);
+  if (!updated) return state;
+  const index = next.findIndex((version) => version.id === updated.id);
+  const previous = index > 0 ? next[index - 1] : undefined;
+  return {
+    phase: "done",
+    version: updated,
+    delta: previous ? updated.ratings.overall - previous.ratings.overall : state.delta,
+  };
+}
+
 export function LadderProvider({
   initialHistory,
   initialUser,
@@ -124,12 +141,7 @@ export function LadderProvider({
 
   const refresh = useCallback(async () => {
     if (demo) return;
-    const next = await getHistory();
-    setLiveHistory(withoutRemoved(next));
-    setUpload((state) => {
-      if (state.phase !== "done" && state.phase !== "processing") return state;
-      return state;
-    });
+    setLiveHistory(withoutRemoved(await getHistory()));
   }, [demo, withoutRemoved]);
 
   useEffect(() => {
@@ -139,17 +151,7 @@ export function LadderProvider({
         .then((next) => {
           const visible = withoutRemoved(next);
           setLiveHistory(visible);
-          setUpload((state) => {
-            if (state.phase !== "done") return state;
-            const updated = visible.find((version) => version.id === state.version.id);
-            if (!updated) return state;
-            const previous = visible[visible.findIndex((version) => version.id === updated.id) - 1];
-            return {
-              phase: "done",
-              version: updated,
-              delta: previous ? updated.ratings.overall - previous.ratings.overall : state.delta,
-            };
-          });
+          setUpload((state) => refreshedUpload(state, visible));
         })
         .catch(() => undefined);
     }, 2000);
@@ -163,12 +165,18 @@ export function LadderProvider({
     return false;
   }, [user]);
 
+  const rejectDemo = useCallback(
+    (message: string) => {
+      if (!demo) return false;
+      setUpload({ phase: "error", message });
+      return true;
+    },
+    [demo],
+  );
+
   const proposeFile = useCallback(
     (file: File) => {
-      if (demo) {
-        setUpload({ phase: "error", message: "Leave sample history before uploading." });
-        return;
-      }
+      if (rejectDemo("Leave sample history before uploading.")) return;
       if (!requireAccount()) return;
       if (upload.phase === "processing") return;
       if (!isSupportedResume(file.name)) {
@@ -186,15 +194,12 @@ export function LadderProvider({
         suggested: labelFromFileName(file.name),
       });
     },
-    [demo, requireAccount, upload.phase],
+    [rejectDemo, requireAccount, upload.phase],
   );
 
   const confirmName = useCallback(
     async (label: string) => {
-      if (demo) {
-        setUpload({ phase: "error", message: "Leave sample history before uploading." });
-        return null;
-      }
+      if (rejectDemo("Leave sample history before uploading.")) return null;
       const file = pendingFile.current;
       const name = label.trim();
       if (!file || !name || confirming.current) return null;
@@ -219,10 +224,7 @@ export function LadderProvider({
         return version;
       } catch (error) {
         pendingFile.current = null;
-        setUpload({
-          phase: "error",
-          message: error instanceof Error ? error.message : "Something went wrong.",
-        });
+        setUpload({ phase: "error", message: messageFrom(error, "Something went wrong.") });
         try {
           setLiveHistory(withoutRemoved(await getHistory()));
         } catch {
@@ -233,7 +235,7 @@ export function LadderProvider({
         confirming.current = false;
       }
     },
-    [current, demo, requireAccount, withoutRemoved],
+    [current, rejectDemo, requireAccount, withoutRemoved],
   );
 
   const cancelNaming = useCallback(() => {
@@ -242,23 +244,17 @@ export function LadderProvider({
   }, []);
 
   const removeVersion = useCallback(async (id: string) => {
-    if (demo) {
-      setUpload({ phase: "error", message: "Leave sample history before removing a resume." });
-      return;
-    }
+    if (rejectDemo("Leave sample history before removing a resume.")) return;
     await deleteVersion(id);
     removedIds.current.add(id);
     setLiveHistory((items) => items.filter((item) => item.id !== id));
     setUpload((state) =>
       state.phase === "done" && state.version.id === id ? { phase: "idle" } : state,
     );
-  }, [demo]);
+  }, [rejectDemo]);
 
   const addVersion = useCallback(async (version: ResumeVersion) => {
-    if (demo) {
-      setUpload({ phase: "error", message: "Leave sample history before saving a version." });
-      return null;
-    }
+    if (rejectDemo("Leave sample history before saving a version.")) return null;
     try {
       const published = await publishVersion(version.id);
       setLiveHistory((items) =>
@@ -268,20 +264,14 @@ export function LadderProvider({
       );
       return published;
     } catch (error) {
-      setUpload({
-        phase: "error",
-        message: error instanceof Error ? error.message : "Could not keep that version.",
-      });
+      setUpload({ phase: "error", message: messageFrom(error, "Could not keep that version.") });
       return null;
     }
-  }, [demo]);
+  }, [rejectDemo]);
 
   const rateForRole = useCallback(
     async (nextRole: Exclude<RoleId, "overall">) => {
-      if (demo) {
-        setUpload({ phase: "error", message: "Leave sample history before rating a role." });
-        return;
-      }
+      if (rejectDemo("Leave sample history before rating a role.")) return;
       const latest = current;
       if (!latest) return;
       setRoleRun(nextRole);
@@ -289,15 +279,12 @@ export function LadderProvider({
         const version = await rateRole(latest.id, nextRole);
         setLiveHistory((items) => items.map((item) => (item.id === version.id ? version : item)));
       } catch (error) {
-        setUpload({
-          phase: "error",
-          message: error instanceof Error ? error.message : "Could not rate this role.",
-        });
+        setUpload({ phase: "error", message: messageFrom(error, "Could not rate this role.") });
       } finally {
         setRoleRun(null);
       }
     },
-    [current, demo],
+    [current, rejectDemo],
   );
 
   const resetUpload = useCallback(() => {
@@ -314,13 +301,10 @@ export function LadderProvider({
 
   const inputRef = useRef<HTMLInputElement>(null);
   const pickFile = useCallback(() => {
-    if (demo) {
-      setUpload({ phase: "error", message: "Leave sample history before uploading." });
-      return;
-    }
+    if (rejectDemo("Leave sample history before uploading.")) return;
     if (!requireAccount()) return;
     inputRef.current?.click();
-  }, [demo, requireAccount]);
+  }, [rejectDemo, requireAccount]);
 
   const value = useMemo(
     () => ({

@@ -57,19 +57,21 @@ def place_resume(store: Store, judge: Judge, resume_id: str, pool_id: str) -> No
 
 
 def score_categories(store: Store, judge: Judge, resume_id: str, pool_id: str | None = None) -> None:
-    """Write the six category Elos for one published résumé.
+    """Category Elos for one published résumé.
 
-    A later version is compared with the previous published résumé, and each
-    category moves off that earlier score. The first version has no earlier
-    résumé, so it is compared once with a calibration anchor in ``pool_id``.
+    Later versions move off the previous résumé's scores. The first version
+    is compared once with a calibration anchor in ``pool_id``.
     """
     resume = store.get_resume(resume_id)
     if resume is None or resume.user_id is None or resume.redacted_text is None:
         return
     if store.has_categories(resume_id):
         return
+
     previous = store.previous_published(resume.user_id, resume.created_at)
-    if previous is not None and previous.redacted_text is not None:
+    if previous is not None:
+        if previous.redacted_text is None:
+            return
         result = run_compare(
             store,
             judge,
@@ -79,15 +81,12 @@ def score_categories(store: Store, judge: Judge, resume_id: str, pool_id: str | 
             pool_key="categories",
             categories=True,
         )
-        previous_scores = store.category_scores(previous.id)
-        previous_membership = store.memberships_for(previous.id).get(previous.level or "")
-        base_overall = previous_membership.elo if previous_membership else 1000.0
-        for category_id, probability in aggregate_categories(result).items():
-            base = previous_scores.get(category_id, base_overall)
-            store.set_category(resume_id, category_id, _elo_after(base, probability))
+        scores = store.category_scores(previous.id)
+        membership = store.memberships_for(previous.id).get(previous.level or "")
+        fallback = membership.elo if membership else 1000.0
+        _store_categories(store, resume_id, result, fallback, scores)
         return
-    if previous is not None:
-        return
+
     if pool_id is None:
         if resume.level is None:
             return
@@ -95,16 +94,24 @@ def score_categories(store: Store, judge: Judge, resume_id: str, pool_id: str | 
     _score_against_anchor(store, judge, resume, pool_id)
 
 
+def _store_categories(
+    store: Store,
+    resume_id: str,
+    result: CompareResult,
+    base: float,
+    prior: dict[str, float] | None = None,
+) -> None:
+    scores = prior or {}
+    for category_id, probability in aggregate_categories(result).items():
+        store.set_category(resume_id, category_id, _elo_after(scores.get(category_id, base), probability))
+
+
 def _score_against_anchor(store: Store, judge: Judge, resume: Resume, pool_id: str) -> None:
     membership = store.memberships_for(resume.id).get(pool_id)
     base = membership.elo if membership else 1000.0
-    chosen = _select_category_anchor(
-        [candidate for candidate in store.candidates(pool_id) if candidate.anchor_slot is not None],
-        base,
-    )
-    if chosen is None:
-        raise ValueError("No calibration résumé is available for category scores.")
-    anchor = store.get_resume(chosen.id)
+    anchors = [candidate for candidate in store.candidates(pool_id) if candidate.anchor_slot is not None]
+    chosen = _select_category_anchor(anchors, base)
+    anchor = store.get_resume(chosen.id) if chosen is not None else None
     if anchor is None or anchor.redacted_text is None:
         raise ValueError("No calibration résumé is available for category scores.")
     result = run_compare(
@@ -116,27 +123,24 @@ def _score_against_anchor(store: Store, judge: Judge, resume: Resume, pool_id: s
         pool_key="categories",
         categories=True,
     )
-    for category_id, probability in aggregate_categories(result).items():
-        store.set_category(resume.id, category_id, _elo_after(base, probability))
+    _store_categories(store, resume.id, result, base)
 
 
 def _select_category_anchor(anchors: list[Candidate], elo: float) -> Candidate | None:
-    """The calibration opponent for a résumé rated ``elo``.
-
-    Prefer the anchor whose rating is closest. When several are equally close,
-    prefer the one nearest the middle of the calibration order. If every anchor
-    is farther than ``CATEGORY_ANCHOR_GAP``, use that middle anchor anyway.
-    """
-    ranked = [candidate for candidate in anchors if candidate.anchor_slot is not None]
+    """Nearest anchor inside CATEGORY_ANCHOR_GAP, else the middle calibration slot."""
+    ranked = sorted(
+        (candidate for candidate in anchors if candidate.anchor_slot is not None),
+        key=lambda candidate: candidate.anchor_slot or 0,
+    )
     if not ranked:
         return None
-    ordered = sorted(ranked, key=lambda candidate: candidate.anchor_slot or 0)
-    middle = ordered[len(ordered) // 2]
+    middle = ranked[len(ranked) // 2]
+    middle_slot = middle.anchor_slot or 0
     nearest = min(
-        ordered,
+        ranked,
         key=lambda candidate: (
             abs(candidate.elo - elo),
-            abs((candidate.anchor_slot or 0) - (middle.anchor_slot or 0)),
+            abs((candidate.anchor_slot or 0) - middle_slot),
             candidate.anchor_slot or 0,
         ),
     )

@@ -43,6 +43,20 @@ const RUN_STEPS = [
   "Weighing six qualities",
 ];
 
+const SECTION = "mx-auto max-w-[1180px] scroll-mt-24 px-5 pb-24 sm:px-8 md:pb-32";
+
+function LabHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <SectionHeader
+      index="04"
+      label="A/B lab"
+      title={<>Change one thing. <em className="text-clay">See if it worked.</em></>}
+    >
+      {children}
+    </SectionHeader>
+  );
+}
+
 function VersionChips({
   versions,
   selectedId,
@@ -261,18 +275,8 @@ export function Lab() {
 
   if (!current) {
     return (
-      <section id="lab" className="mx-auto max-w-[1180px] scroll-mt-24 px-5 pb-24 sm:px-8 md:pb-32">
-        <SectionHeader
-          index="04"
-          label="A/B lab"
-          title={
-            <>
-              Change one thing. <em className="text-clay">See if it worked.</em>
-            </>
-          }
-        >
-          Upload two versions and Ladder weighs them head to head, in both orders.
-        </SectionHeader>
+      <section id="lab" className={SECTION}>
+        <LabHeader>Upload two versions and Ladder weighs them head to head, in both orders.</LabHeader>
       </section>
     );
   }
@@ -359,20 +363,12 @@ export function Lab() {
           : "Ready. Weigh A against B.";
 
   return (
-    <section id="lab" className="mx-auto max-w-[1180px] scroll-mt-24 px-5 pb-24 sm:px-8 md:pb-32">
-      <SectionHeader
-        index="04"
-        label="A/B lab"
-        title={
-          <>
-            Change one thing. <em className="text-clay">See if it worked.</em>
-          </>
-        }
-      >
+    <section id="lab" className={SECTION}>
+      <LabHeader>
         Put your current resume on one side and the edited version on the
         other. Ladder weighs them head to head, in both orders, on six
         qualities.
-      </SectionHeader>
+      </LabHeader>
 
       <Reveal className="relative mt-12 overflow-hidden rounded-[36px] border border-bark/10 bg-gradient-to-b from-white/60 to-peach/40 p-5 sm:p-8 md:mt-16 md:p-10">
         <div className="grid gap-6 md:grid-cols-2 md:gap-8">
