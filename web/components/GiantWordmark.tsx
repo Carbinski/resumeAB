@@ -1,20 +1,30 @@
 import { BRAND } from "@/lib/brand";
 
 const MARK =
-  "font-display pointer-events-none select-none whitespace-nowrap text-center uppercase leading-[0.78] tracking-[-0.02em] text-ink/90 [mask-image:linear-gradient(to_bottom,black_45%,transparent_100%)]";
+  "font-display pointer-events-none select-none whitespace-nowrap text-center uppercase leading-[0.78] tracking-[-0.02em] text-ink/90";
 
-/**
- * Full-bleed display wordmark. The bottom edge matches the footer close.
- * The top edge opens the page with the same mark, under the fixed nav.
- * Motion is skipped when the visitor prefers reduced motion.
- */
+const FOOTER_MASK = "[mask-image:linear-gradient(to_bottom,black_45%,transparent_100%)]";
+const OPEN_MASK = "[mask-image:linear-gradient(to_bottom,black_46%,transparent_74%)]";
+
 export function GiantWordmark({ edge = "bottom" }: { edge?: "top" | "bottom" }) {
   const top = edge === "top";
   const mark = (
     <div
       aria-hidden
-      className={top ? `giant-open-wordmark ${MARK}` : `mt-10 md:mt-14 ${MARK}`}
-      style={{ fontSize: "min(30.5vw, 420px)", marginBottom: "-0.07em" }}
+      className={
+        top
+          ? `giant-open-wordmark ${MARK} ${OPEN_MASK}`
+          : `mt-10 md:mt-14 ${MARK} ${FOOTER_MASK}`
+      }
+      style={
+        top
+          ? {
+              fontSize: "min(30.5vw, 420px)",
+              paddingBottom: "0.22em",
+              marginBottom: "-0.22em",
+            }
+          : { fontSize: "min(30.5vw, 420px)", marginBottom: "-0.07em" }
+      }
     >
       {BRAND.name}
     </div>
