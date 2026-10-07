@@ -61,21 +61,18 @@ interface StripRow {
 
 function TrackStrip({ rows }: { rows: StripRow[] }) {
   return (
-    <div className="rounded-[28px] border border-bark/10 bg-cream/70 px-5 py-4 text-center">
-      <p className="text-[0.98rem] leading-relaxed text-ink">
-        {rows.map((row, index) => (
-          <span key={row.id}>
-            {index > 0 ? <span className="text-taupe"> · </span> : null}
-            {trackVerdict(ROLE_BY_ID[row.id].label, row.pB)}
-            {row.delta != null ? (
-              <span className="mx-1.5 inline-flex align-middle">
-                <DeltaChip delta={row.delta} />
-              </span>
-            ) : null}
-          </span>
+    <div className="w-full rounded-[28px] border border-bark/15 bg-cream px-4 py-4 text-left sm:px-6 sm:py-5">
+      <ul className="grid gap-3">
+        {rows.map((row) => (
+          <li key={row.id} className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[1.05rem] leading-snug text-ink sm:text-[1.15rem]">
+              {trackVerdict(ROLE_BY_ID[row.id].label, row.pB)}
+            </span>
+            {row.delta != null ? <DeltaChip delta={row.delta} className="text-[0.85rem]" /> : null}
+          </li>
         ))}
-      </p>
-      <p className="mt-2 text-[0.85rem] leading-snug text-olive">
+      </ul>
+      <p className="mt-3 text-[0.9rem] leading-snug text-olive">
         These calls do not move either ladder.
       </p>
     </div>
@@ -564,6 +561,26 @@ export function Lab() {
           </div>
 
           <div className="mt-4 flex flex-col items-center gap-5">
+            {shownPhase === "result" && displayResult && stripIds.length > 0 ? (
+              <div className="flex w-full max-w-xl flex-col items-center gap-3">
+                <Button
+                  className="h-14 w-full px-8 text-[1.08rem] sm:h-16 sm:text-[1.2rem]"
+                  disabled={stripBusy}
+                  onClick={() => void runStrip()}
+                >
+                  {stripBusy ? "Comparing…" : "Compare each track"}
+                </Button>
+                <p className="max-w-md text-center text-[0.95rem] leading-snug text-olive">
+                  One verdict for every track on this pair. The ladders stay put.
+                </p>
+                {stripError ? (
+                  <p role="alert" className="text-center text-[0.95rem] text-clay">
+                    {stripError}
+                  </p>
+                ) : null}
+                {shownStrip && shownStrip.rows.length > 0 ? <TrackStrip rows={shownStrip.rows} /> : null}
+              </div>
+            ) : null}
             {storedResult || (demo && roleUnrated) ? null : (
               <Magnetic>
                 <Button className="h-12 min-w-[12rem] px-8" disabled={!ready || shownPhase === "running"} onClick={run}>
@@ -620,26 +637,6 @@ export function Lab() {
             transition={{ duration: 0.9, ease: EASE }}
             className="overflow-hidden"
           >
-            {stripIds.length > 0 ? (
-              <div className="flex flex-col items-center gap-3 pt-6">
-                <Button variant="outline" disabled={stripBusy} onClick={() => void runStrip()}>
-                  {stripBusy ? "Comparing…" : "Compare each track"}
-                </Button>
-                {stripError ? (
-                  <p role="alert" className="text-center text-[0.86rem] text-clay">
-                    {stripError}
-                  </p>
-                ) : null}
-                {shownStrip && shownStrip.rows.length > 0 ? (
-                  <TrackStrip rows={shownStrip.rows} />
-                ) : (
-                  <p className="max-w-md text-center text-[0.85rem] leading-snug text-olive">
-                    These calls do not move either ladder.
-                  </p>
-                )}
-              </div>
-            ) : null}
-
             <div className="grid gap-5 pt-6 lg:grid-cols-12">
               <div className="glass rounded-[32px] p-5 sm:p-8 lg:col-span-8">
                 <Duels result={displayResult} />
