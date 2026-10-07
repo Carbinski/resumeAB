@@ -1,6 +1,23 @@
 import type { CategoryId } from "./categories";
-import type { RoleId } from "./roles";
+import type { RoleId, TrackId } from "./roles";
 import type { ResumeVersion } from "./types";
+
+/** Elo gap for a track that is provisional or rated on both résumés. */
+export function placedTrackDelta(
+  a: ResumeVersion,
+  b: ResumeVersion,
+  role: TrackId,
+): number | null {
+  const left = a.ratings[role];
+  const right = b.ratings[role];
+  if (left == null || right == null) return null;
+  const placed = (version: ResumeVersion) => {
+    const run = version.roleStatus[role];
+    return run?.status === "provisional" || run?.status === "rated";
+  };
+  if (!placed(a) || !placed(b)) return null;
+  return right - left;
+}
 
 /** Role fit moves with the selected role; every other category is role-agnostic. */
 export function categoryElo(

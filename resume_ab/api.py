@@ -18,7 +18,15 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from resume_ab.categories import ROLE_DESCRIPTIONS
-from resume_ab.cohort import INDUSTRIES, LEVELS, ROLE_IDS, overall_pool, role_pool
+from resume_ab.cohort import (
+    FOCUS_IDS,
+    INDUSTRIES,
+    LEVELS,
+    ROLE_IDS,
+    overall_pool,
+    role_pool,
+    suggested_focus,
+)
 from resume_ab.judge import JevJudge, Judge
 from resume_ab.load import LoadError, content_sha256, load_resume
 from resume_ab.place import place_resume, run_compare
@@ -44,6 +52,7 @@ class SignupBody(BaseModel):
     level: str
     industry: str
     company: str | None = Field(default=None, max_length=200)
+    focus: str | None = Field(default=None, max_length=16)
 
 
 class LoginBody(BaseModel):
@@ -56,6 +65,7 @@ class ProfileBody(BaseModel):
     level: str
     industry: str
     company: str | None = Field(default=None, max_length=200)
+    focus: str | None = Field(default=None, max_length=16)
 
 
 class CompareBody(BaseModel):
@@ -144,6 +154,7 @@ def create_app(
             raise HTTPException(status_code=400, detail="Enter a valid email.")
         level, industry, company = _profile_fields(body.level, body.industry, body.company)
         name = _resume_name(body.nameOnResume)
+        focus = suggested_focus(industry) if body.focus is None else _clean_focus(body.focus)
         try:
             user = store.create_user(
                 email=email,
@@ -152,6 +163,7 @@ def create_app(
                 level=level,
                 industry=industry,
                 company=company,
+                focus=focus,
             )
         except Exception as error:
             if "UNIQUE" in str(error).upper():
@@ -183,12 +195,14 @@ def create_app(
     @app.patch("/me")
     def update_me(body: ProfileBody, user: User = Depends(current_user)) -> dict:
         level, industry, company = _profile_fields(body.level, body.industry, body.company)
+        focus = user.focus if body.focus is None else _clean_focus(body.focus)
         updated = store.update_user(
             user.id,
             name_on_resume=_resume_name(body.nameOnResume),
             level=level,
             industry=industry,
             company=company,
+            focus=focus,
         )
         return user_payload(updated)
 
@@ -344,6 +358,15 @@ def create_app(
         return comparison_payload(store, left, right, result, role=response_role)
 
     return app
+
+
+def _clean_focus(value: str) -> str:
+    cleaned = strip_controls(value)
+    if cleaned == "":
+        return ""
+    if cleaned not in FOCUS_IDS:
+        raise HTTPException(status_code=400, detail="Pick a focus from the list.")
+    return cleaned
 
 
 def _profile_fields(level: str, industry: str, company: str | None) -> tuple[str, str, str | None]:

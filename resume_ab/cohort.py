@@ -44,7 +44,32 @@ BANDS: tuple[tuple[float, float, str], ...] = (
 MATCH_BUDGET = 8
 INDUSTRY_COHORT = 3
 NEIGHBOR_LIMIT = 5
-ROLE_IDS = ("ai", "cloud", "fullstack")
+ROLE_IDS = (
+    "ai",
+    "cloud",
+    "fullstack",
+    "embedded",
+    "mechanical",
+    "flight",
+    "devices",
+    "biodata",
+)
+FOCUS_IDS = ("cs", "mee", "bme")
+# Industry is the kind of company. Focus is the degree family, suggested once
+# and then left to the person. These industries hire across the three groups.
+_FOCUS_FOR_INDUSTRY = {
+    "software": "cs",
+    "aerospace": "mee",
+    "manufacturing": "mee",
+    "automation": "mee",
+    "biotech": "bme",
+    "healthcare": "bme",
+}
+
+
+def suggested_focus(industry: str) -> str:
+    """A starting focus for an industry, or empty when they should pick."""
+    return _FOCUS_FOR_INDUSTRY.get(industry, "")
 
 
 def overall_pool(level: str) -> str:

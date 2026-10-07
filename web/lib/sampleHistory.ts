@@ -8,6 +8,7 @@ import type {
   NeighborCard,
   OrderResult,
   ResumeVersion,
+  RoleRatings,
   Standing,
 } from "./types";
 
@@ -65,6 +66,20 @@ function roleRun(score: number | null) {
   return score == null ? null : { status: "rated" as const, message: null };
 }
 
+function ratings(overall: number, ai: number | null, cloud: number | null): RoleRatings {
+  return {
+    overall,
+    ai,
+    cloud,
+    fullstack: null,
+    embedded: null,
+    mechanical: null,
+    flight: null,
+    devices: null,
+    biodata: null,
+  };
+}
+
 function sample(row: {
   id: string;
   label: string;
@@ -83,14 +98,25 @@ function sample(row: {
   const cloud = row.cloud ?? null;
   return {
     level: "intern",
+    industry: "software",
+    company: null,
     id: row.id,
     label: row.label,
     fileName: row.fileName,
     uploadedAt: row.uploadedAt,
     note: row.note,
-    ratings: { overall: row.overall, ai: row.ai, cloud, fullstack: null },
+    ratings: ratings(row.overall, row.ai, cloud),
     categories: row.categories,
-    roleStatus: { ai: roleRun(row.ai), cloud: roleRun(cloud), fullstack: null },
+    roleStatus: {
+      ai: roleRun(row.ai),
+      cloud: roleRun(cloud),
+      fullstack: null,
+      embedded: null,
+      mechanical: null,
+      flight: null,
+      devices: null,
+      biodata: null,
+    },
     standing: standing(row.band, row.percentile, row.counts, row.neighbors),
   };
 }

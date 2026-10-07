@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { deleteAccount, login, logout, signup, updateProfile } from "@/lib/api";
-import { INDUSTRIES, LEVELS, type LevelId } from "@/lib/cohort";
+import { FOCUSES, INDUSTRIES, LEVELS, suggestedFocus, type FocusId, type LevelId } from "@/lib/cohort";
 import { useLadder } from "./LadderProvider";
 import { Button } from "./ui/Button";
 
@@ -29,6 +29,8 @@ export function Account() {
   const [level, setLevel] = useState<LevelId>(user?.level ?? "intern");
   const [industry, setIndustry] = useState(user?.industry ?? "software");
   const [company, setCompany] = useState(user?.company ?? "");
+  const [focus, setFocus] = useState<FocusId | "">(user?.focus ?? suggestedFocus(user?.industry ?? "software"));
+  const [focusTouched, setFocusTouched] = useState(!!user);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -39,6 +41,8 @@ export function Account() {
     setLevel(user?.level ?? "intern");
     setIndustry(user?.industry ?? "software");
     setCompany(user?.company ?? "");
+    setFocus(user?.focus ?? suggestedFocus(user?.industry ?? "software"));
+    setFocusTouched(!!user);
     setConfirmDelete(false);
   }
 
@@ -86,7 +90,7 @@ export function Account() {
       const account =
         mode === "login"
           ? await login(email, password)
-          : await signup({ email, password, nameOnResume, level, industry, company });
+          : await signup({ email, password, nameOnResume, level, industry, company, focus });
       setUser(account);
       setPassword("");
       await refresh();
@@ -100,7 +104,7 @@ export function Account() {
       return;
     }
     await run(async () => {
-      setUser(await updateProfile({ nameOnResume, level, industry, company }));
+      setUser(await updateProfile({ nameOnResume, level, industry, company, focus }));
     }, "Could not update your profile.");
   };
 
@@ -122,6 +126,13 @@ export function Account() {
     setIndustry,
     company,
     setCompany,
+    focus,
+    setFocus,
+    chooseFocus: (value: FocusId | "") => {
+      setFocusTouched(true);
+      setFocus(value);
+    },
+    suggestFocus: !focusTouched,
   };
 
   return (
@@ -133,7 +144,8 @@ export function Account() {
         </h2>
         {user ? (
           <p className="mt-3 text-[0.9rem] leading-relaxed text-olive">
-            Level and industry decide who appears around you. Company is shown on your anonymous card.
+            Level and industry decide who appears around you. Focus is your degree
+            family and chooses the tracks. Company is shown on your anonymous card.
           </p>
         ) : null}
         {offline ? (
@@ -258,6 +270,10 @@ function ProfileFields({
   setIndustry,
   company,
   setCompany,
+  focus,
+  setFocus,
+  chooseFocus,
+  suggestFocus,
 }: {
   nameOnResume: string;
   setNameOnResume: (value: string) => void;
@@ -267,6 +283,10 @@ function ProfileFields({
   setIndustry: (value: string) => void;
   company: string;
   setCompany: (value: string) => void;
+  focus: FocusId | "";
+  setFocus: (value: FocusId | "") => void;
+  chooseFocus: (value: FocusId | "") => void;
+  suggestFocus: boolean;
 }) {
   return (
     <div className="mt-4 grid gap-3">
@@ -306,7 +326,11 @@ function ProfileFields({
           <select
             className={selectClass}
             value={industry}
-            onChange={(event) => setIndustry(event.target.value)}
+            onChange={(event) => {
+              const next = event.target.value;
+              setIndustry(next);
+              if (suggestFocus) setFocus(suggestedFocus(next));
+            }}
           >
             {isCurrentIndustry(industry) ? null : (
               <option value={industry} disabled className="bg-cream text-ink">
@@ -314,6 +338,42 @@ function ProfileFields({
               </option>
             )}
             {INDUSTRIES.map((item) => (
+              <option key={item.id} value={item.id} className="bg-cream text-ink">
+                {item.label}
+              </option>
+            ))}
+          </select>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 20 20"
+            className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-olive"
+            fill="none"
+          >
+            <path
+              d="M5 7.5 10 12.5 15 7.5"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+      </label>
+      <label className="grid gap-1.5 text-[0.78rem] text-olive">
+        Focus
+        <span className="text-[0.86rem] leading-relaxed">
+          Degree family. It chooses the tracks and can differ from the industry.
+        </span>
+        <span className="relative block">
+          <select
+            className={selectClass}
+            value={focus}
+            onChange={(event) => chooseFocus(event.target.value as FocusId | "")}
+          >
+            <option value="" className="bg-cream text-ink">
+              Choose a focus
+            </option>
+            {FOCUSES.map((item) => (
               <option key={item.id} value={item.id} className="bg-cream text-ink">
                 {item.label}
               </option>

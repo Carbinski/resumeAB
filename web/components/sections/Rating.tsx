@@ -2,7 +2,8 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
-import { ROLES, ROLE_BY_ID } from "@/lib/roles";
+import { industryLabel, levelLabel } from "@/lib/cohort";
+import { ROLE_BY_ID, visibleRoleIds } from "@/lib/roles";
 import { Anatomy } from "../Anatomy";
 import { EloChart } from "../EloChart";
 import { ResumeLibrary } from "../ResumeLibrary";
@@ -24,7 +25,12 @@ const RANGES = [
 ] as const;
 
 export function Rating() {
-  const { history, role, setRole, rateForRole, roleRun, removeVersion, demo, exitDemo } = useLadder();
+  const { history, role, setRole, rateForRole, roleRun, removeVersion, demo, exitDemo, user } =
+    useLadder();
+  const roleOptions = visibleRoleIds(demo, user?.focus).map((id) => ({
+    id,
+    label: ROLE_BY_ID[id].label,
+  }));
   const [range, setRange] = useState<Range>("all");
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -59,6 +65,7 @@ export function Rating() {
   }
 
   const active = versions.find((v) => v.id === activeId) ?? versions[versions.length - 1];
+  const poolLevel = active.level === "newgrad" ? "new-grad" : "intern";
   const index = history.findIndex((v) => v.id === active.id);
   const before = index > 0 ? history[index - 1] : undefined;
   const overallDelta = before ? active.ratings.overall - before.ratings.overall : 0;
@@ -72,12 +79,12 @@ export function Rating() {
         label="Your rating"
         title={
           <>
-            Your ELO, <em className="text-clay">over time.</em>
+            {levelLabel(active.level)} · <em className="text-clay">{industryLabel(active.industry)}</em>
           </>
         }
       >
-        Every version you upload is rated against the pool. Slide across the
-        line to see what changed, and what it did to your score.
+        This score is the {poolLevel} ladder, shared across industries. Slide
+        across the line to see what changed, and what it did to your score.
       </SectionHeader>
 
       {demo ? (
@@ -154,7 +161,7 @@ export function Rating() {
           <div className="mt-6">
             <Segmented
               label="Role"
-              options={ROLES.map((r) => ({ id: r.id, label: r.label }))}
+              options={roleOptions}
               value={role}
               onChange={setRole}
             />

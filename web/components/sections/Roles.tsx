@@ -5,7 +5,7 @@ import { useId, useRef, useState } from "react";
 import { compareVersions } from "@/lib/api";
 import { ELO_CENTER, beatsAverage, formatPercent } from "@/lib/elo";
 import { cn } from "@/lib/cn";
-import { ROLES, type RoleId } from "@/lib/roles";
+import { ROLE_BY_ID, visibleRoleIds, type RoleId } from "@/lib/roles";
 import { useLadder } from "../LadderProvider";
 import { Button } from "../ui/Button";
 import { DeltaChip } from "../ui/DeltaChip";
@@ -35,7 +35,7 @@ function Rung({
   const { history, rateForRole, roleRun, demo } = useLadder();
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "0px 0px -12% 0px" });
-  const role = ROLES.find((r) => r.id === roleId)!;
+  const role = ROLE_BY_ID[roleId];
   const series = history.flatMap((v) => {
     const score = v.ratings[roleId];
     return score == null ? [] : [score];
@@ -132,7 +132,7 @@ function Rung({
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 pl-8 text-[0.82rem] text-olive">
           <span>
-            Beats the average resume{" "}
+            {role.againstCalibration ? "Against the calibration set" : "Beats the average resume"}{" "}
             <span className="text-ink">{formatPercent(beatsAverage(now))}</span> of the time
           </span>
           {series.length > 0 ? (
@@ -243,8 +243,9 @@ function AddRole() {
 }
 
 export function Roles() {
-  const { role, setRole } = useLadder();
+  const { role, setRole, demo, user } = useLadder();
   const highlightId = useId();
+  const roles = visibleRoleIds(demo, user?.focus);
 
   return (
     <section id="roles" className="mx-auto max-w-[1180px] scroll-mt-24 px-5 pb-20 sm:px-8 md:pb-28">
@@ -264,12 +265,12 @@ export function Roles() {
       <div className="mt-12 grid gap-8 md:mt-16 lg:grid-cols-12 lg:gap-12">
         <Reveal className="lg:col-span-8">
           <div role="radiogroup" aria-label="Role" className="divide-y divide-bark/10">
-            {ROLES.map((r, i) => (
-              <div key={r.id} className="py-1">
+            {roles.map((roleId, i) => (
+              <div key={roleId} className="py-1">
                 <Rung
-                  roleId={r.id}
-                  selected={role === r.id}
-                  onSelect={() => setRole(r.id)}
+                  roleId={roleId}
+                  selected={role === roleId}
+                  onSelect={() => setRole(roleId)}
                   highlightId={highlightId}
                   index={i}
                 />

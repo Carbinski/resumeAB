@@ -1,4 +1,5 @@
 import type { CategoryId } from "./categories";
+import type { FocusId } from "./cohort";
 import type { RoleId } from "./roles";
 
 /** Everything the rating engine says about one resume version. */
@@ -8,6 +9,11 @@ export interface RoleRatings {
   ai: number | null;
   cloud: number | null;
   fullstack: number | null;
+  embedded: number | null;
+  mechanical: number | null;
+  flight: number | null;
+  devices: number | null;
+  biodata: number | null;
 }
 
 export interface RatingSnapshot {
@@ -46,6 +52,9 @@ export interface Standing {
 export interface ResumeVersion extends RatingSnapshot {
   id: string;
   level: "intern" | "newgrad";
+  /** Copied onto the résumé at upload. A later profile edit does not change it. */
+  industry: string;
+  company: string | null;
   label: string;
   fileName: string;
   /** ISO date. */
@@ -62,6 +71,8 @@ export interface Account {
   level: "intern" | "newgrad";
   industry: string;
   company: string | null;
+  /** Degree family. Empty until they pick one. */
+  focus: FocusId | "";
 }
 
 /** Mirrors `OrderResult` in `resume_ab/compare.py`, one per left/right order. */

@@ -10,9 +10,11 @@ import {
 } from "motion/react";
 import { BRAND } from "@/lib/brand";
 import { CATEGORIES, type CategoryDef } from "@/lib/categories";
+import { industryLabel, levelLabel } from "@/lib/cohort";
 import { beatsAverage, formatPercent } from "@/lib/elo";
 import { categoryElo, previous } from "@/lib/ratings";
-import { SPECIFIC_ROLES, type RoleTrack } from "@/lib/roles";
+import { ROLE_BY_ID, tracksForFocus, type RoleId, type RoleTrack } from "@/lib/roles";
+import type { Account } from "@/lib/types";
 import { useWindowFileDrop } from "@/lib/useWindowFileDrop";
 import { cn } from "@/lib/cn";
 import { Dropzone } from "../Dropzone";
@@ -28,6 +30,19 @@ const INNER = { rx: 31, ry: 37 };
 const OUTER = { rx: 43, ry: 44 };
 const CATEGORY_ANGLES = [-150, -90, -30, 30, 90, 150];
 const ROLE_ANGLES = [-176, -8, 56];
+const MARKETING_TRACKS: readonly RoleId[] = ["ai", "cloud", "fullstack"];
+
+function ladderSentence(user: Account): string {
+  const parts = [levelLabel(user.level), industryLabel(user.industry)];
+  if (user.company) parts.push(user.company);
+  const peers = user.level === "newgrad" ? "new grads" : "interns";
+  return `${parts.join(" · ")}. Your score is against other ${peers}.`;
+}
+
+function orbitTracks(demo: boolean, user: Account | null): RoleTrack[] {
+  const ids = demo || !user ? MARKETING_TRACKS : tracksForFocus(user.focus);
+  return ids.map((id) => ROLE_BY_ID[id]);
+}
 
 function polar(ring: { rx: number; ry: number }, deg: number) {
   const a = (deg * Math.PI) / 180;
@@ -111,8 +126,13 @@ function RoleChip({ role, value }: { role: RoleTrack; value: number | null }) {
 }
 
 function ScoreCard({ dragging }: { dragging: boolean }) {
-  const { history, current } = useLadder();
+  const { history, current, user, demo } = useLadder();
   if (!current) {
+    const ladder = user?.level === "newgrad" ? "new-grad" : "intern";
+    const empty =
+      user && !demo
+        ? `Upload a resume onto the ${ladder} ladder.`
+        : "Create an account and upload a resume.";
     return (
       <motion.div
         className="glass relative z-20 w-[min(62vw,248px)] rounded-[30px] p-4 text-center sm:p-5"
@@ -124,9 +144,7 @@ function ScoreCard({ dragging }: { dragging: boolean }) {
           Overall ELO
         </p>
         <p className="font-display mt-1 text-[clamp(3.6rem,10vw,5.4rem)] leading-none text-ink">—</p>
-        <p className="mt-2 text-[0.74rem] leading-snug text-olive">
-          Create an account and upload a resume.
-        </p>
+        <p className="mt-2 text-[0.74rem] leading-snug text-olive">{empty}</p>
       </motion.div>
     );
   }
@@ -163,7 +181,8 @@ function ScoreCard({ dragging }: { dragging: boolean }) {
 }
 
 function OrbitStage({ dragging }: { dragging: boolean }) {
-  const { current } = useLadder();
+  const { current, user, demo } = useLadder();
+  const roleChips = orbitTracks(demo, user);
   const reduce = useReducedMotion();
   const rawX = useMotionValue(0);
   const rawY = useMotionValue(0);
@@ -224,7 +243,7 @@ function OrbitStage({ dragging }: { dragging: boolean }) {
           <CategoryChip def={def} value={current ? categoryElo(current, def.id, "overall") : null} />
         </OrbitChip>
       ))}
-      {SPECIFIC_ROLES.map((role, i) => (
+      {roleChips.map((role, i) => (
         <OrbitChip
           key={role.id}
           pos={polar(OUTER, ROLE_ANGLES[i])}
@@ -242,8 +261,10 @@ function OrbitStage({ dragging }: { dragging: boolean }) {
 }
 
 export function Hero() {
-  const { proposeFile, pickFile, demo, enterDemo, exitDemo } = useLadder();
+  const { proposeFile, pickFile, demo, enterDemo, exitDemo, user, hasLiveVersion } = useLadder();
   const dragging = useWindowFileDrop((file) => proposeFile(file));
+  const signedIn = !!user && !demo;
+  const showRating = signedIn && hasLiveVersion;
 
   return (
     <section id="top" className="grain relative overflow-hidden">
@@ -286,9 +307,9 @@ export function Hero() {
           transition={{ duration: 0.9, ease: EASE, delay: 0.7 }}
           className="mx-auto mt-7 max-w-[34rem] text-[1.05rem] leading-relaxed text-olive"
         >
-          {BRAND.name} rates your resume the way a hiring panel would: against
-          others, one matchup at a time. Watch your ELO move with every edit,
-          then test the next change before you send it.
+          {signedIn && user
+            ? ladderSentence(user)
+            : `${BRAND.name} rates your resume the way a hiring panel would: against others, one matchup at a time. Watch your ELO move with every edit, then test the next change before you send it.`}
         </motion.p>
 
         <motion.div
@@ -297,16 +318,29 @@ export function Hero() {
           transition={{ duration: 0.9, ease: EASE, delay: 0.85 }}
           className="mt-8 flex flex-wrap items-center justify-center gap-3"
         >
-          <Magnetic>
-            <button type="button" onClick={pickFile} className={buttonClass("ink", "h-12 px-7")}>
+          {showRating ? (
+            <Magnetic>
+              <a href="#rating" className={buttonClass("ink", "h-12 px-7")}>
+                See your rating
+              </a>
+            </Magnetic>
+          ) : (
+            <Magnetic>
+              <button type="button" onClick={pickFile} className={buttonClass("ink", "h-12 px-7")}>
+                Upload resume
+              </button>
+            </Magnetic>
+          )}
+          {showRating ? (
+            <button type="button" onClick={pickFile} className={buttonClass("glass", "h-12 px-7")}>
               Upload resume
             </button>
-          </Magnetic>
+          ) : null}
           {demo ? (
             <button type="button" onClick={exitDemo} className={buttonClass("glass", "h-12 px-7")}>
               Leave sample history
             </button>
-          ) : (
+          ) : hasLiveVersion ? null : (
             <button type="button" onClick={enterDemo} className={buttonClass("glass", "h-12 px-7")}>
               View sample history
             </button>
