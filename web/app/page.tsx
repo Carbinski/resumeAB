@@ -3,6 +3,7 @@ import { Nav } from "@/components/Nav";
 import { SmoothScroll } from "@/components/SmoothScroll";
 import { Account } from "@/components/Account";
 import { Footer } from "@/components/sections/Footer";
+import { GiantWordmark } from "@/components/GiantWordmark";
 import { Hero } from "@/components/sections/Hero";
 import { HowItWorks, Marquee } from "@/components/sections/HowItWorks";
 import { Lab } from "@/components/sections/Lab";
@@ -32,6 +33,7 @@ export default async function Home({
       >
         <Nav />
         <main className="m-2 overflow-clip rounded-[28px] border border-bark/10 bg-cream md:m-3 md:rounded-[44px]">
+          <GiantWordmark edge="top" />
           <Hero />
           <Account />
           <Marquee />

@@ -262,20 +262,17 @@ export function Hero() {
       />
 
       <div className="relative z-10 mx-auto max-w-[1180px] px-5 pb-16 pt-32 text-center sm:px-8 md:pt-40">
-        <motion.p
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: EASE, delay: 0.15 }}
-          className="mx-auto inline-flex items-center gap-2.5 rounded-full border border-bark/15 bg-cream/60 px-4 py-1.5 text-[0.78rem] text-olive backdrop-blur-sm"
-        >
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inset-0 rounded-full bg-clay" style={{ animation: "pulse-ring 2s ease-out infinite" }} />
-            <span className="relative h-1.5 w-1.5 rounded-full bg-clay" />
-          </span>
-          {demo ? "Sample history" : "Rated head to head, never by keyword"}
-        </motion.p>
-
-        <h1 className="font-display mx-auto mt-7 max-w-[15ch] text-[clamp(3.2rem,10.5vw,8.6rem)] leading-[0.9] text-ink">
+        {demo ? (
+          <motion.p
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: EASE, delay: 0.15 }}
+            className="mx-auto mb-7 inline-flex items-center gap-2.5 rounded-full border border-bark/15 bg-cream/60 px-4 py-1.5 text-[0.78rem] text-olive backdrop-blur-sm"
+          >
+            Sample history
+          </motion.p>
+        ) : null}
+        <h1 className="font-display mx-auto max-w-[15ch] text-[clamp(3.2rem,10.5vw,8.6rem)] leading-[0.9] text-ink">
           {["Know", "where", "your", "resume"].map((w, i) => (
             <Word key={w} i={i}>{w}</Word>
           ))}
