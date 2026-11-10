@@ -338,3 +338,27 @@ def test_resume_text_log_is_not_written_to_the_process_output(tmp_path: Path, ca
     logged = path.read_text(encoding="utf-8")
     assert "ada@example.test" in logged
     assert (path.stat().st_mode & 0o777) == 0o600
+
+
+def test_resume_text_log_rotates_and_stays_private(tmp_path: Path, capsys):
+    path = configure_text_log(tmp_path, max_bytes=500, backup_count=2)
+    secret = "secret ada@example.test"
+    for index in range(30):
+        log_resume_text(
+            stage="extracted",
+            filename=f"{index}.txt",
+            text=f"{secret} {'x' * 80}",
+        )
+    captured = capsys.readouterr()
+    assert secret not in captured.out
+    assert secret not in captured.err
+    files = sorted(path.parent.glob("resume-text.log*"))
+    assert [item.name for item in files] == [
+        "resume-text.log",
+        "resume-text.log.1",
+        "resume-text.log.2",
+    ]
+    assert any(secret in item.read_text(encoding="utf-8") for item in files)
+    for item in files:
+        assert (item.stat().st_mode & 0o777) == 0o600
+    assert path.stat().st_size < 500 + 800

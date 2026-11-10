@@ -10,6 +10,7 @@ import os
 import re
 import secrets
 import threading
+from collections import deque
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
@@ -43,6 +44,27 @@ _MAX_TEXT = 400_000
 _MAX_FIELD = 2_000
 _COOKIE = "ladder_session"
 _ALLOWED_SUFFIXES = {".txt", ".pdf", ".docx", ".tex"}
+_DEFAULT_PLACEMENT_LIMIT = 2
+
+
+def placement_limit(explicit: int | None = None) -> int:
+    """How many placement threads may call the judge at once.
+
+    ``LADDER_MAX_PLACEMENTS`` overrides the default of 2. A blank value, a
+    non-integer, or a number below 1 keeps that default, so a bad env file
+    cannot stall every rating or open one thread per résumé.
+    """
+    if explicit is None:
+        raw = os.environ.get("LADDER_MAX_PLACEMENTS", "").strip()
+        if not raw:
+            return _DEFAULT_PLACEMENT_LIMIT
+        try:
+            explicit = int(raw)
+        except ValueError:
+            return _DEFAULT_PLACEMENT_LIMIT
+    if explicit < 1:
+        return _DEFAULT_PLACEMENT_LIMIT
+    return explicit
 
 
 class SignupBody(BaseModel):
@@ -82,32 +104,54 @@ def create_app(
     sync: bool = False,
     resume_jobs: bool = False,
     secure_cookie: bool = False,
+    max_placements: int | None = None,
 ) -> FastAPI:
     judge = judge or JevJudge()
     app = FastAPI(title="Ladder")
     app.state.store = store
     app.state.judge = judge
+    limit = placement_limit(max_placements)
     inflight: set[tuple[str, str]] = set()
+    pending: deque[tuple[str, str]] = deque()
+    pending_keys: set[tuple[str, str]] = set()
     inflight_lock = threading.Lock()
 
-    def spawn(resume_id: str, pool_id: str) -> None:
-        key = (resume_id, pool_id)
-        with inflight_lock:
-            if key in inflight:
-                return
-            inflight.add(key)
-
+    def start(resume_id: str, pool_id: str) -> None:
         def job() -> None:
             try:
                 place_resume(store, judge, resume_id, pool_id)
             finally:
-                with inflight_lock:
-                    inflight.discard(key)
+                release(resume_id, pool_id)
 
         if sync:
             job()
         else:
-            threading.Thread(target=job, daemon=True).start()
+            threading.Thread(target=job, name=f"place-{resume_id[:8]}", daemon=True).start()
+
+    def release(resume_id: str, pool_id: str) -> None:
+        nxt: tuple[str, str] | None = None
+        with inflight_lock:
+            inflight.discard((resume_id, pool_id))
+            if pending and len(inflight) < limit:
+                nxt = pending.popleft()
+                pending_keys.discard(nxt)
+                inflight.add(nxt)
+        if nxt is not None:
+            start(*nxt)
+
+    def spawn(resume_id: str, pool_id: str) -> None:
+        # A duplicate pair is skipped. Extra pairs wait, so a burst cannot
+        # open one judge thread per résumé.
+        key = (resume_id, pool_id)
+        with inflight_lock:
+            if key in inflight or key in pending_keys:
+                return
+            if len(inflight) >= limit:
+                pending.append(key)
+                pending_keys.add(key)
+                return
+            inflight.add(key)
+        start(resume_id, pool_id)
 
     if resume_jobs:
         for resume_id, pool_id in store.incomplete_jobs():
@@ -474,7 +518,16 @@ def build_default_app() -> FastAPI:
     store = Store(data / "ladder.db", data / "blobs")
     store.seed_anchors()
     secure_cookie = os.environ.get("LADDER_SECURE_COOKIES", "").strip().lower() in {"1", "true", "yes"}
-    return create_app(store, JevJudge(), sync=False, resume_jobs=True, secure_cookie=secure_cookie)
+    limit = placement_limit()
+    status_log.warning("At most %s placements call the judge at once.", limit)
+    return create_app(
+        store,
+        JevJudge(),
+        sync=False,
+        resume_jobs=True,
+        secure_cookie=secure_cookie,
+        max_placements=limit,
+    )
 
 
 app = build_default_app()
