@@ -32,7 +32,7 @@ One machine, two processes, one disk.
 - Run the API as `python -m resume_ab.api` on `127.0.0.1` only. Leave it as one process. Set `LADDER_SECURE_COOKIES=1` and `TYPESAFE_API_KEY` in that process's environment.
 - Put `LADDER_DATA` on a persistent disk (`ladder.db`, `blobs/`, and `logs/`). Back up the database and `blobs/` together. The judge reads `redacted_text` in SQLite; the blob is the original upload (`{id}.pdf` and the other allowed suffixes, mode `0600`, at most 5 MB, at most 20 files kept per account).
 - Keep `data/logs/resume-text.log` on that same disk and out of any shared log drain. `resume_ab/textlog.py` appends the extracted text and the redacted text on every upload. The file rotates at 8 MiB and keeps three older files, all mode 600. It is still the copy of someone's résumé. Do not ship that directory to a log service.
-- `spawn` in `create_app` skips a duplicate `(resume_id, pool_id)` and runs at most `LADDER_MAX_PLACEMENTS` placement threads (default 2). Further uploads stay `placing` and start in order when a slot frees. Raise the number on the box if the queue, not judge errors, is what people wait on. Restarting still picks up memberships left in `placing` or `provisional`, including ones that were only waiting in memory.
+- `spawn` in `create_app` skips a duplicate `(resume_id, pool_id)` and runs at most `LADDER_MAX_PLACEMENTS` placement threads (default 2, never more than 32). Further uploads stay `placing` and start in order when a slot frees. Raise the number on the box if the queue, not judge errors, is what people wait on. Restarting still picks up memberships left in `placing` or `provisional`, including ones that were only waiting in memory.
 
 Restarting the API is safe for in-progress ratings: `resume_jobs=True` calls `incomplete_jobs` and respawns memberships still in `placing` or `provisional`. Sessions survive because they are rows, not memory. Daemon threads do not survive the process, which is why that restart scan exists.
 
@@ -42,7 +42,7 @@ Restarting the API is safe for in-progress ratings: `resume_jobs=True` calls `in
 
 **The process-wide store lock is the next bottleneck, and it shows up as a slow site while ratings are running.** `Store` uses one SQLite connection and one `RLock`. Writes cannot corrupt each other. The expensive critical section is `refit`: after every match it loads every membership and every match in that pool and runs Bradley–Terry (`resume_ab/rating.py`, up to 100,000 steps) while holding the lock. Login holds the same lock across scrypt (`n = 2**14` in `authenticate`). The polls from every waiting browser take it too. SQLite itself is not the first thing to fall over. This lock is.
 
-**One disk is the durability limit.** Accounts, session hashes, redacted text, Elo, and original files are all under `LADDER_DATA`. Losing the disk loses the product. Filling the disk is unlikely before the judge fan-out; the unbounded text log is the file to watch.
+**One disk is the durability limit.** Accounts, session hashes, redacted text, Elo, and original files are all under `LADDER_DATA`. Losing the disk loses the product. Filling the disk is unlikely before the judge fan-out. The résumé text log is capped by rotation, and it stays off any shared log drain.
 
 **Session hosting breaks when a second API process appears.** The cookie is valid only for the database that stored its hash, and the blob paths are local. Two Next.js processes are fine: they are stateless and proxy to one origin. Two API processes are not, with the code as it stands.
 

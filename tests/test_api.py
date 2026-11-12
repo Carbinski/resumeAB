@@ -742,6 +742,9 @@ def test_placement_limit_rejects_a_bad_env_and_keeps_the_default(monkeypatch: py
     assert placement_limit() == 2
     assert placement_limit(1) == 1
     assert placement_limit(0) == 2
+    assert placement_limit(10_000) == 32
+    monkeypatch.setenv("LADDER_MAX_PLACEMENTS", "100")
+    assert placement_limit() == 32
 
 
 class _GatedJudge:
@@ -785,6 +788,10 @@ class _GatedJudge:
         return False
 
 
+def text_for(index: int) -> str:
+    return RESUME + f"\n- Project {index} shipped a campus tool used by {index + 12} students.\n"
+
+
 def test_a_burst_of_uploads_cannot_open_one_judge_thread_per_resume(tmp_path: Path):
     cap = 2
     burst = 4
@@ -796,10 +803,7 @@ def test_a_burst_of_uploads_cannot_open_one_judge_thread_per_resume(tmp_path: Pa
     ids: list[str] = []
     try:
         for index in range(burst):
-            text = (
-                RESUME
-                + f"\n- Project {index} shipped a campus tool used by {index + 12} students.\n"
-            )
+            text = text_for(index)
             response = client.post(
                 "/versions",
                 files={"file": (f"resume-{index}.txt", text.encode(), "text/plain")},
@@ -815,11 +819,10 @@ def test_a_burst_of_uploads_cannot_open_one_judge_thread_per_resume(tmp_path: Pa
         assert judge.entries == cap
         duplicate = client.post(
             "/versions",
-            files={"file": ("resume-0.txt", (RESUME + "\n- Project 0 shipped a campus tool used by 12 students.\n").encode(), "text/plain")},
+            files={"file": ("resume-0.txt", text_for(0).encode(), "text/plain")},
             data={"draft": "false"},
         )
         assert duplicate.status_code == 200, duplicate.text
-        time.sleep(0.3)
         assert judge.max_seen == cap
         assert judge.entries == cap
         judge.release()

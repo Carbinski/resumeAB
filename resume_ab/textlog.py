@@ -25,7 +25,13 @@ class _PrivateRotatingHandler(RotatingFileHandler):
     """Rotate résumé text and keep every file on that path mode 600."""
 
     def _open(self):
-        stream = super()._open()
+        # umask is process-wide. 077 makes the create itself mode 600, so the
+        # résumé text is never briefly world-readable before the chmod.
+        previous = os.umask(0o077)
+        try:
+            stream = super()._open()
+        finally:
+            os.umask(previous)
         self._restrict(self.baseFilename)
         return stream
 
@@ -77,16 +83,24 @@ def configure_text_log(
     path = data_dir / "logs" / "resume-text.log"
     path.parent.mkdir(parents=True, exist_ok=True)
     log.propagate = False
-    log.handlers = [handler for handler in log.handlers if type(handler) is not logging.StreamHandler]
-    resolved = str(path.resolve())
-    if not any(getattr(handler, "baseFilename", None) == resolved for handler in log.handlers):
-        file_handler = _PrivateRotatingHandler(
-            path,
-            maxBytes=max_bytes,
-            backupCount=backup_count,
-            encoding="utf-8",
-        )
-        file_handler.setFormatter(logging.Formatter("%(message)s\n"))
-        log.addHandler(file_handler)
+    # One file receives this text. A second configure must not keep writing
+    # the previous directory, and a stream handler must not copy it to stderr.
+    kept: list[logging.Handler] = []
+    for handler in list(log.handlers):
+        if isinstance(handler, logging.FileHandler):
+            handler.close()
+            continue
+        if type(handler) is logging.StreamHandler:
+            continue
+        kept.append(handler)
+    log.handlers = kept
+    file_handler = _PrivateRotatingHandler(
+        path,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+    file_handler.setFormatter(logging.Formatter("%(message)s\n"))
+    log.addHandler(file_handler)
     path.chmod(0o600)
     return path

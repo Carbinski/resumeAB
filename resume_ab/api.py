@@ -45,14 +45,16 @@ _MAX_FIELD = 2_000
 _COOKIE = "ladder_session"
 _ALLOWED_SUFFIXES = {".txt", ".pdf", ".docx", ".tex"}
 _DEFAULT_PLACEMENT_LIMIT = 2
+_MAX_PLACEMENT_LIMIT = 32
 
 
 def placement_limit(explicit: int | None = None) -> int:
     """How many placement threads may call the judge at once.
 
     ``LADDER_MAX_PLACEMENTS`` overrides the default of 2. A blank value, a
-    non-integer, or a number below 1 keeps that default, so a bad env file
-    cannot stall every rating or open one thread per résumé.
+    non-integer, or a number below 1 keeps that default. A number above 32
+    stays at 32, so a bad env file cannot stall every rating or open one
+    thread per résumé.
     """
     if explicit is None:
         raw = os.environ.get("LADDER_MAX_PLACEMENTS", "").strip()
@@ -64,6 +66,8 @@ def placement_limit(explicit: int | None = None) -> int:
             return _DEFAULT_PLACEMENT_LIMIT
     if explicit < 1:
         return _DEFAULT_PLACEMENT_LIMIT
+    if explicit > _MAX_PLACEMENT_LIMIT:
+        return _MAX_PLACEMENT_LIMIT
     return explicit
 
 

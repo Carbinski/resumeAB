@@ -79,13 +79,14 @@ stop_pid() {
 }
 
 cleanup() {
+  trap - EXIT HUP INT TERM
   stop_pid web_pid
   stop_pid api_pid
 }
 trap cleanup EXIT
-trap 'cleanup; exit 129' HUP
-trap 'cleanup; exit 130' INT
-trap 'cleanup; exit 143' TERM
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 "$python_bin" -m resume_ab.api &
 api_pid=$!
@@ -107,9 +108,11 @@ if [[ "$ready" != 1 ]]; then
   exit 1
 fi
 
+# The judge key stays on the API process. Next.js only proxies to it.
 (
   cd "$root/web"
-  exec "$root/web/node_modules/.bin/next" start --hostname 127.0.0.1 --port "${PORT:-3000}"
+  unset TYPESAFE_API_KEY
+  exec "$root/web/node_modules/.bin/next" start --hostname 127.0.0.1 --port "$PORT"
 ) &
 web_pid=$!
 
