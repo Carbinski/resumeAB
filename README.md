@@ -22,9 +22,11 @@ python -m resume_ab.api          # http://127.0.0.1:8000
 cd web && npm install && npm run dev
 ```
 
+Production on one machine is `scripts/start.sh`. Build the site first (`cd web && npm run build`). The script binds the API to `127.0.0.1`, then starts the site on `127.0.0.1:3000`. Put HTTPS in front of that port. Copy `.env.example` to `.env` and set `TYPESAFE_API_KEY` there.
+
 Set `TYPESAFE_API_KEY` in `.env` before uploading. Each published résumé is compared with at most eight opponents in its intern or new-grad pool, in both reading orders. Synthetic calibration résumés are seeded automatically and never appear on the public board.
 
-Every upload appends the extracted text and the redacted text to `data/logs/resume-text.log`. That file stays on the API machine and is not copied to the process output. The browser never receives it.
+Every upload appends the extracted text and the redacted text to `data/logs/resume-text.log`. That log rotates at 8 MiB, keeps three older files, stays on the API machine, and is not copied to the process output. The browser never receives it.
 
 ## Caching
 

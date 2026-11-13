@@ -31,18 +31,18 @@ One machine, two processes, one disk.
 - Terminate HTTPS in front of `next start`. Point `LADDER_API_ORIGIN` at `http://127.0.0.1:8000`.
 - Run the API as `python -m resume_ab.api` on `127.0.0.1` only. Leave it as one process. Set `LADDER_SECURE_COOKIES=1` and `TYPESAFE_API_KEY` in that process's environment.
 - Put `LADDER_DATA` on a persistent disk (`ladder.db`, `blobs/`, and `logs/`). Back up the database and `blobs/` together. The judge reads `redacted_text` in SQLite; the blob is the original upload (`{id}.pdf` and the other allowed suffixes, mode `0600`, at most 5 MB, at most 20 files kept per account).
-- Keep `data/logs/resume-text.log` on that same disk and out of any shared log drain. `resume_ab/textlog.py` appends the extracted text and the redacted text on every upload, with no rotation. Cap or rotate that file as part of bringing the box up. It is the copy of someone's résumé that will otherwise grow forever.
-- A private beta of a few dozen people fits this shape with no code change. Before a class, a career fair, or a public link, cap how many placement threads `spawn` may run at once. `inflight` in `create_app` only skips a duplicate `(resume_id, pool_id)`. It does not limit the fan-out.
+- Keep `data/logs/resume-text.log` on that same disk and out of any shared log drain. `resume_ab/textlog.py` appends the extracted text and the redacted text on every upload. The file rotates at 8 MiB and keeps three older files, all mode 600. It is still the copy of someone's résumé. Do not ship that directory to a log service.
+- `spawn` in `create_app` skips a duplicate `(resume_id, pool_id)` and runs at most `LADDER_MAX_PLACEMENTS` placement threads (default 2, never more than 32). Further uploads stay `placing` and start in order when a slot frees. Raise the number on the box if the queue, not judge errors, is what people wait on. Restarting still picks up memberships left in `placing` or `provisional`, including ones that were only waiting in memory.
 
 Restarting the API is safe for in-progress ratings: `resume_jobs=True` calls `incomplete_jobs` and respawns memberships still in `placing` or `provisional`. Sessions survive because they are rows, not memory. Daemon threads do not survive the process, which is why that restart scan exists.
 
 ### What breaks first
 
-**Judge latency and cost break first.** The matchup budget caps work per résumé per pool. It does not cap how many résumés start together. Each published résumé occupies a thread for up to 16 Jev calls (8 matchups × 2 orders), often fewer because of the early stop, plus 2 more calls for category scores. Rating all three current roles adds up to 16 calls each, with no category pass. A lab comparison adds 2 calls and holds the single API process's request until Jev returns. A burst of publishes opens one unbounded thread per résumé, all of them calling Jev immediately. The visible failure is `standing.status = "error"` ("The judge could not score this résumé.") and `502` on `/compare`. The bill moves with that same fan-out.
+**Judge latency and cost break first.** The matchup budget caps work per résumé per pool. `LADDER_MAX_PLACEMENTS` caps how many of those placements call Jev at once. Each published résumé still occupies its thread for up to 16 Jev calls (8 matchups × 2 orders), often fewer because of the early stop, plus 2 more calls for category scores. Rating all three current roles adds up to 16 calls each, with no category pass. A lab comparison adds 2 calls and holds the single API process's request until Jev returns. The lab path is not part of the placement cap. The visible failure is `standing.status = "error"` ("The judge could not score this résumé.") and `502` on `/compare`. The bill moves with how high that cap is set.
 
 **The process-wide store lock is the next bottleneck, and it shows up as a slow site while ratings are running.** `Store` uses one SQLite connection and one `RLock`. Writes cannot corrupt each other. The expensive critical section is `refit`: after every match it loads every membership and every match in that pool and runs Bradley–Terry (`resume_ab/rating.py`, up to 100,000 steps) while holding the lock. Login holds the same lock across scrypt (`n = 2**14` in `authenticate`). The polls from every waiting browser take it too. SQLite itself is not the first thing to fall over. This lock is.
 
-**One disk is the durability limit.** Accounts, session hashes, redacted text, Elo, and original files are all under `LADDER_DATA`. Losing the disk loses the product. Filling the disk is unlikely before the judge fan-out; the unbounded text log is the file to watch.
+**One disk is the durability limit.** Accounts, session hashes, redacted text, Elo, and original files are all under `LADDER_DATA`. Losing the disk loses the product. Filling the disk is unlikely before the judge fan-out. The résumé text log is capped by rotation, and it stays off any shared log drain.
 
 **Session hosting breaks when a second API process appears.** The cookie is valid only for the database that stored its hash, and the blob paths are local. Two Next.js processes are fine: they are stateless and proxy to one origin. Two API processes are not, with the code as it stands.
 
@@ -129,7 +129,7 @@ Show an Elo delta on a strip row only when that track is `provisional` or `rated
 
 ## Order of work
 
-1. **One box.** Next.js in front, the API on localhost, `LADDER_DATA` on a persistent disk, text log kept local and rotated, one API process. Cap placement threads before any public link. No new database.
+1. **One box.** Next.js in front, the API on localhost, `LADDER_DATA` on a persistent disk, text log kept local, one API process. `scripts/start.sh` is that pair. The placement cap and the text-log rotation are already in the process. No new database.
 2. **Signed-in copy.** Hero, rating header, standing, and lab, using the account and the résumé snapshot. Add industry and company to `version_payload` so the words match the row that was placed.
 3. **Focus.** One field, defaulted from industry, editable. CS-focused people see the three roles that already exist. Everyone else still has Overall.
 4. **Five new tracks.** `embedded`, `mechanical`, `flight`, `devices`, `biodata`, through the existing role lists and the existing rate button. Still opt-in. Still a budget of 8 per track.

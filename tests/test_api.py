@@ -1,11 +1,13 @@
 import logging
 import sqlite3
+import threading
+import time
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from resume_ab.api import create_app
+from resume_ab.api import create_app, placement_limit
 from resume_ab.categories import ROLE_DESCRIPTIONS
 from resume_ab.cohort import MATCH_BUDGET, ROLE_IDS, suggested_focus
 from resume_ab.place import _elo_after, _select_category_anchor
@@ -727,3 +729,113 @@ def test_focus_column_migration_is_safe_to_repeat(tmp_path: Path):
     )
     assert created.focus == "bme"
     store.close()
+
+
+def test_placement_limit_rejects_a_bad_env_and_keeps_the_default(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("LADDER_MAX_PLACEMENTS", raising=False)
+    assert placement_limit() == 2
+    monkeypatch.setenv("LADDER_MAX_PLACEMENTS", "4")
+    assert placement_limit() == 4
+    monkeypatch.setenv("LADDER_MAX_PLACEMENTS", "0")
+    assert placement_limit() == 2
+    monkeypatch.setenv("LADDER_MAX_PLACEMENTS", "nope")
+    assert placement_limit() == 2
+    assert placement_limit(1) == 1
+    assert placement_limit(0) == 2
+    assert placement_limit(10_000) == 32
+    monkeypatch.setenv("LADDER_MAX_PLACEMENTS", "100")
+    assert placement_limit() == 32
+
+
+class _GatedJudge:
+    """Blocks inside compare until release, and records how many overlap."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._script_lock = threading.Lock()
+        self._gate = threading.Event()
+        self._scripted = ScriptedJudge()
+        self.in_flight = 0
+        self.max_seen = 0
+        self.entries = 0
+
+    def compare(self, left, right, role_description, *, categories: bool = False):
+        with self._lock:
+            self.in_flight += 1
+            self.entries += 1
+            self.max_seen = max(self.max_seen, self.in_flight)
+        try:
+            if not self._gate.wait(15):
+                raise TimeoutError("placement gate was not released")
+            with self._script_lock:
+                return self._scripted.compare(
+                    left, right, role_description, categories=categories
+                )
+        finally:
+            with self._lock:
+                self.in_flight -= 1
+
+    def release(self) -> None:
+        self._gate.set()
+
+    def wait_for(self, count: int, timeout: float = 5) -> bool:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with self._lock:
+                if self.in_flight >= count:
+                    return True
+            time.sleep(0.01)
+        return False
+
+
+def text_for(index: int) -> str:
+    return RESUME + f"\n- Project {index} shipped a campus tool used by {index + 12} students.\n"
+
+
+def test_a_burst_of_uploads_cannot_open_one_judge_thread_per_resume(tmp_path: Path):
+    cap = 2
+    burst = 4
+    judge = _GatedJudge()
+    store = Store(tmp_path / "ladder.db", tmp_path / "blobs")
+    store.seed_anchors()
+    client = TestClient(create_app(store, judge, sync=False, max_placements=cap))
+    _signup(client, "ada@example.test", "Northwind")
+    ids: list[str] = []
+    try:
+        for index in range(burst):
+            text = text_for(index)
+            response = client.post(
+                "/versions",
+                files={"file": (f"resume-{index}.txt", text.encode(), "text/plain")},
+                data={"draft": "false"},
+            )
+            assert response.status_code == 200, response.text
+            body = response.json()
+            assert body["standing"]["status"] == "placing"
+            ids.append(body["id"])
+        assert judge.wait_for(cap)
+        assert judge.max_seen == cap
+        assert judge.in_flight == cap
+        assert judge.entries == cap
+        duplicate = client.post(
+            "/versions",
+            files={"file": ("resume-0.txt", text_for(0).encode(), "text/plain")},
+            data={"draft": "false"},
+        )
+        assert duplicate.status_code == 200, duplicate.text
+        assert judge.max_seen == cap
+        assert judge.entries == cap
+        judge.release()
+        deadline = time.monotonic() + 15
+        statuses: dict[str, str] = {}
+        while time.monotonic() < deadline:
+            listed = {row["id"]: row for row in client.get("/versions").json()}
+            statuses = {resume_id: listed[resume_id]["standing"]["status"] for resume_id in ids}
+            if statuses and all(status == "rated" for status in statuses.values()):
+                break
+            time.sleep(0.05)
+        assert statuses == {resume_id: "rated" for resume_id in ids}
+        assert judge.max_seen == cap
+        assert judge.entries > cap
+    finally:
+        judge.release()
